@@ -73,3 +73,7 @@ export default defineConfig([
 ])
 
 ```
+
+## Credits
+
+3D simplex noise (`src/shaders/lib/noise3D.glsl`) from [webgl-noise](https://github.com/stegu/webgl-noise) by Ashima Arts / Stefan Gustavson (MIT).
