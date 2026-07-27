@@ -1,0 +1,66 @@
+:root {
+  --void: #03040a;
+  --aether: #7bdcff;
+  --aether-warm: #c9a4ff;
+  --ink: #dfe9ff;
+  --sat: env(safe-area-inset-top, 0px);
+  --sar: env(safe-area-inset-right, 0px);
+  --sab: env(safe-area-inset-bottom, 0px);
+  --sal: env(safe-area-inset-left, 0px);
+
+  /* Minimum comfortable touch target. */
+  --tap: 44px;
+
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+
+html, body, #root {
+  margin: 0;
+  padding: 0;
+  background: var(--void);
+  color: var(--ink);
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -webkit-text-size-adjust: 100%;
+}
+
+html, body, #root {
+  height: 100%;
+  height: 100dvh;
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+
+body {
+  -webkit-touch-callout: none;
+  -webkit-tap-highlight-color: transparent;
+  user-select: none;
+}
+
+canvas {
+  display: block;
+  touch-action: none;
+}
+
+.selectable, .holo-copy, .text-mode { user-select: text; -webkit-user-select: text; }
+
+button, [role='button'], .tappable {
+  min-width: var(--tap);
+  min-height: var(--tap);
+  touch-action: manipulation;
+}
+
+:focus-visible { outline: 2px solid var(--aether); outline-offset: 2px; }
+:focus:not(:focus-visible) { outline: none; }
+
+.sr-only {
+  position: absolute; width: 1px; height: 1px;
+  padding: 0; margin: -1px; overflow: hidden;
+  clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .holo-links a:hover { }
+}
