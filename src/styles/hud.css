@@ -1,0 +1,62 @@
+.hud {
+  position: fixed;
+  z-index: 30;
+  top: calc(var(--sat) + 16px);
+  right: calc(var(--sar) + 16px);
+
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+  max-width: min(90vw, 420px);
+}
+
+.hud button {
+  min-height: var(--tap);
+  padding: 0 14px;
+  background: rgba(3, 6, 16, 0.55);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border: 1px solid rgba(123, 220, 255, 0.28);
+  border-radius: 3px;
+
+  color: var(--ink);
+  font: inherit;
+  font-size: 12px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.hud button[disabled] {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.hud button:active {
+  background: rgba(123, 220, 255, 0.18);
+}
+
+@media (hover: hover) {
+  .hud button:hover:not([disabled]) {
+    background: rgba(123, 220, 255, 0.14);
+    border-color: rgba(123, 220, 255, 0.5);
+  }
+}
+
+/* Compact: move to a bottom bar in the thumb zone. */
+@media (pointer: coarse) and (max-width: 600px) {
+  .hud {
+    top: auto;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    max-width: none;
+    justify-content: center;
+    gap: 6px;
+    padding: 8px max(8px, var(--sal)) calc(var(--sab) + 8px) max(8px, var(--sar));
+    background: linear-gradient(to top, rgba(3, 5, 14, 0.95), rgba(3, 5, 14, 0.7));
+    border-top: 1px solid rgba(123, 220, 255, 0.18);
+  }
+}

@@ -37,19 +37,7 @@ function coneSpread(depth: number, childCount: number): number {
   return Math.min(Math.PI * 0.42, 0.5 + childCount * 0.16)
 }
 
-/*
- * Hard ceiling on how far off-axis a child may be placed (~30°).
- *
- * The camera rig always looks at the current beacon and can only lean a few
- * degrees — there is no free-look — so anything outside the frustum is
- * effectively unreachable except via the star map.
- *
- * Beacons sit ~150 units apart while the camera is only ~19 units back (it's
- * framed to the holo panel, not the graph), so at that scale the polar angle
- * here is very nearly the on-screen angle. 30° lands ~27° off the view axis,
- * just inside the 31° vertical half-FOV at fov=62. Raising this much past 32°
- * starts pushing sibling beacons off the top and bottom of the screen.
- */
+/* Hard ceiling on how far off-axis a child may be placed (~30°). */
 const MAX_POLAR = Math.PI * 0.167
   
 export function buildGraph(site: Site): Graph {
@@ -67,7 +55,7 @@ export function buildGraph(site: Site): Graph {
     inheritedOutward: THREE.Vector3,
     indexInSiblings: number,
     siblingCount: number) => {
-      if (nodes.has(beacon.id)) return // cycle guard
+      if (nodes.has(beacon.id)) return
       let pos: THREE.Vector3
       let outward: THREE.Vector3
   
