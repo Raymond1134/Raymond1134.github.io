@@ -12,6 +12,9 @@ export default defineConfig({
   resolve: {
     alias: { '@': resolve(__dirname, 'src') },
   },
+  server: {
+    host: true,
+  },
   build: {
     target: 'es2022',
     rollupOptions: {
