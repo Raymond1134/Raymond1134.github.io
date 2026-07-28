@@ -1,11 +1,13 @@
 import { useMemo } from 'react'
 import { useStore } from '@/state/store'
 import CameraRig from './CameraRig'
+import ParticleField from './ParticleField'
 
 export default function Scene() {
   return (
     <>
       <CameraRig />
+      <ParticleField />
       <DebugBeacons />
     </>
   )

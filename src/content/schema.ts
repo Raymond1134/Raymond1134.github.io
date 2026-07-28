@@ -40,8 +40,10 @@ export const SiteSchema = z.object({
     description: z.string(),
     url: z.string(),
     ogImage: z.string().optional(),
-    themeColorCold: z.string().default('#3a7bd5'),
-    themeColorHot: z.string().default('#d6b8ff'),
+    themeColorCold: z.string().default('#2b5cc4'),
+    themeColorMid: z.string().default('#7d5fd8'),
+    themeColorHot: z.string().default('#e07ab5'),
+    themeColorAccent: z.string().default('#fff2fa'),
   }),
   audio: z.object({
     ambient: z.string().optional(),

@@ -3,7 +3,12 @@
     "name": "Raymond Zheng",
     "role": "Computer Science Student",
     "description": "Placeholder description.",
-    "url": "https://raymond1134.github.io"
+    "url": "https://raymond1134.github.io",
+
+    "themeColorCold": "#2b5cc4",
+    "themeColorMid": "#7d5fd8",
+    "themeColorHot": "#e07ab5",
+    "themeColorAccent": "#fff2fa"
   },
   "root": "nexus",
   "beacons": [

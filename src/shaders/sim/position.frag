@@ -18,8 +18,7 @@ void main() {
 
   pos += velData.xyz * uDt;
 
-  // Lifetime gives us continuous turnover, which hides the seams when the
-  // swarm relocates to a new beacon.
+  // Continuous turnover hides the seams when the swarm relocates to a new beacon.
   float rate = (0.045 + 0.06 * hash12(uv)) * uLifeScale;
   life -= uDt * rate;
 

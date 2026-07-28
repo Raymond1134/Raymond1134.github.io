@@ -16,7 +16,7 @@ export interface Graph {
   rootId: string
 }
 
-function hash01(str: string, salt = 0): number {
+export function hash01(str: string, salt = 0): number {
   let h = 2166136261 ^ salt
   for (let i = 0; i < str.length; i++) {
     h = Math.imul(h ^ str.charCodeAt(i), 16777619)

@@ -1,9 +1,6 @@
 #include noise3D;
 
-/**
- * A 3-component vector potential built from three decorrelated noise samples.
- * The large offsets keep the three channels from correlating.
- */
+/** Three decorrelated noise samples; the large offsets keep the channels apart. */
 vec3 aetherPotential(vec3 p) {
   return vec3(
     snoise(p),
@@ -15,12 +12,11 @@ vec3 aetherPotential(vec3 p) {
 /**
  * curl(F) = ( dFz/dy - dFy/dz,  dFx/dz - dFz/dx,  dFy/dx - dFx/dy )
  *
- * Central differences. The result is divergence-free, which is exactly why
- * particles form long coherent filaments instead of clumping and gapping.
+ * Central differences. The result is divergence-free, which is why particles
+ * form long coherent filaments instead of clumping and gapping.
  *
- * Cost: 6 potential evaluations = 18 snoise calls per particle per frame.
- * This is the single most expensive thing in the project. See Phase 10.3 for
- * the optimisation levers — don't reach for them until you've measured.
+ * Cost: 6 potential evaluations = 18 snoise calls per particle per frame. This
+ * is the single most expensive thing in the project.
  */
 vec3 curlNoise(vec3 p, float eps) {
   vec3 dx = vec3(eps, 0.0, 0.0);

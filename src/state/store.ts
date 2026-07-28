@@ -56,7 +56,7 @@ export const useStore = create<State>((set, get) => ({
   pendingId: null,
   phase: 'idle',
   travelClock: 0,
-  quality: 'medium',
+  quality: 'high',
   reducedMotion: typeof matchMedia !== 'undefined' && matchMedia('(prefers-reduced-motion: reduce)').matches,
   audioEnabled: false,
   mapOpen: false,
