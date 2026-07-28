@@ -21,6 +21,9 @@
     "noEmit": true,
     "jsx": "react-jsx",
 
+    /* Lets `src/content/index.ts` do `import raw from './site.json'`. */
+    "resolveJsonModule": true,
+
     /* Linting */
     "strict": true,
     "noUnusedLocals": true,
