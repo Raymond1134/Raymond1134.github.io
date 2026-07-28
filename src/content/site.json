@@ -1,0 +1,46 @@
+{
+  "meta": {
+    "name": "Raymond Zheng",
+    "role": "Computer Science Student",
+    "description": "Placeholder description.",
+    "url": "https://raymond1134.github.io"
+  },
+  "root": "nexus",
+  "beacons": [
+    {
+      "id": "nexus",
+      "title": "Raymond Zheng",
+      "subtitle": "Computer Science Student",
+      "body": "Welcome. Pick a light.",
+      "children": ["about", "projects", "contact"]
+    },
+    {
+      "id": "about",
+      "title": "About",
+      "body": "Placeholder about text."
+    },
+    {
+      "id": "projects",
+      "title": "Projects",
+      "children": ["project-one", "project-two"]
+    },
+    {
+      "id": "project-one",
+      "title": "Project One",
+      "body": "Placeholder 1."
+    },
+    {
+      "id": "project-two",
+      "title": "Project Two",
+      "body": "Placeholder 2."
+    },
+    {
+      "id": "contact",
+      "title": "Contact",
+      "links": [
+        { "label": "GitHub", "url": "https://github.com/Raymond1134", "icon": "github" },
+        { "label": "Email", "url": "mailto:raymondzheng2000@gmail.com", "icon": "mail" }
+      ]
+    }
+  ]
+}
