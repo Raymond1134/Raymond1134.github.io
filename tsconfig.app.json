@@ -4,9 +4,14 @@
     "target": "es2023",
     "lib": ["ES2023", "DOM"],
     "module": "esnext",
-    "types": ["vite/client"],
+    "types": ["vite/client", "vite-plugin-glsl/ext"],
     "allowArbitraryExtensions": true,
     "skipLibCheck": true,
+
+    /* Mirrors resolve.alias in vite.config.ts so `@/...` imports type-check.
+       No `baseUrl` — it's deprecated in TS 6; `paths` now resolves relative
+       to this file's directory. */
+    "paths": { "@/*": ["./src/*"] },
 
     /* Bundler mode */
     "moduleResolution": "bundler",
@@ -17,6 +22,7 @@
     "jsx": "react-jsx",
 
     /* Linting */
+    "strict": true,
     "noUnusedLocals": true,
     "noUnusedParameters": true,
     "erasableSyntaxOnly": true,
