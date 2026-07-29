@@ -28,7 +28,7 @@ const GOLDEN_ANGLE = Math.PI * (3 - Math.sqrt(5))
   
 /* Distance from a beacon to its children. */
 function ringRadius(depth: number): number {
-  return 150 * Math.pow(0.78, depth)
+  return 50 * Math.pow(0.86, depth)
 }
   
 /* Half-angle of the cone that children are scattered into, in radians. */
@@ -37,7 +37,6 @@ function coneSpread(depth: number, childCount: number): number {
   return Math.min(Math.PI * 0.42, 0.5 + childCount * 0.16)
 }
 
-/* Hard ceiling on how far off-axis a child may be placed (~30°). */
 const MAX_POLAR = Math.PI * 0.167
   
 export function buildGraph(site: Site): Graph {
