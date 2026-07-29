@@ -15,6 +15,22 @@ import {
 
 const SHELL_RADIUS = 46
 const BASE_OPACITY = 0.72
+
+/* Motion slowdown. 1 is the original speed; 1.35 is ~26% slower. */
+const TAU = 1.35
+
+/* Pre-slowdown values */
+const BASE = {
+  shellSoftness: 0.55,
+  curlAmp: 11.0,
+  swirl: 4.5,
+  damping: 0.965,
+  speedScale: 22.0,
+} as const
+
+const forceScale = 1 / (TAU * TAU)
+const damping = Math.pow(BASE.damping, 1 / TAU)
+const COLOR_WARMTH = 0.92
 const tmpColor = new THREE.Color()
 const homeVec = new THREE.Vector3()
 
@@ -56,12 +72,14 @@ export default function ParticleField() {
       uFocus: { value: new THREE.Vector3() },
       uImplode: { value: 0 },
       uShellRadius: { value: SHELL_RADIUS },
-      uShellSoftness: { value: 0.55 },
+      uShellSoftness: { value: BASE.shellSoftness * forceScale },
       uNoiseOffset: { value: new THREE.Vector3() },
       uCurlFreq: { value: 0.028 },
-      uCurlAmp: { value: 11.0 },
-      uSwirl: { value: 4.5 },
-      uDamping: { value: 0.965 },
+      uCurlAmp: { value: BASE.curlAmp * forceScale },
+      uSwirl: { value: BASE.swirl * forceScale },
+      uDamping: { value: damping },
+
+      /* NOT scaled by TAU. */
       uMaxSpeed: { value: 42.0 },
     })
 
@@ -109,7 +127,7 @@ export default function ParticleField() {
           uImplode: { value: 0 },
           uTime: { value: 0 },
           uOpacity: { value: BASE_OPACITY },
-          uSpeedScale: { value: 22.0 },
+          uSpeedScale: { value: (BASE.speedScale / TAU) * COLOR_WARMTH },
           uFogDensity: { value: 0.005 },
           uColorCold: { value: new THREE.Color(site.meta.themeColorCold) },
           uColorMid: { value: new THREE.Color(site.meta.themeColorMid) },
@@ -140,8 +158,9 @@ export default function ParticleField() {
 
     const vu = sim.velVar.material.uniforms
     const pu = sim.posVar.material.uniforms
+    const simTime = state.clock.elapsedTime / TAU
 
-    vu.uTime.value = state.clock.elapsedTime
+    vu.uTime.value = simTime
     vu.uDt.value = dt
     vu.uImplode.value = implode
     vu.uHome.value.copy(homeVec)
@@ -149,12 +168,12 @@ export default function ParticleField() {
     vu.uNoiseOffset.value.copy(noiseOffsetFor(s.currentId))
     vu.uShellRadius.value = SHELL_RADIUS * (1 - implode * 0.55)
 
-    pu.uTime.value = state.clock.elapsedTime
+    pu.uTime.value = simTime
     pu.uDt.value = dt
     pu.uHome.value.copy(homeVec)
     pu.uShellRadius.value = vu.uShellRadius.value
     pu.uRespawn.value = s.phase === 'gather' || s.phase === 'veil' ? 0 : 1
-    pu.uLifeScale.value = s.phase === 'disperse' ? 2.2 : 1.0
+    pu.uLifeScale.value = (s.phase === 'disperse' ? 2.2 : 1.0) / TAU
 
     // Tint the swarm toward the current beacon's colour.
     tmpColor.set(node.color ?? site.meta.themeColorMid)

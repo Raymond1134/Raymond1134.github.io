@@ -19,6 +19,7 @@ void main() {
   pos += velData.xyz * uDt;
 
   // Continuous turnover hides the seams when the swarm relocates to a new beacon.
+  // uLifeScale carries a 1/TAU, so a particle still covers the same ground.
   float rate = (0.045 + 0.06 * hash12(uv)) * uLifeScale;
   life -= uDt * rate;
 

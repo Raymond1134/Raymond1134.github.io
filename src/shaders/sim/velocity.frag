@@ -39,6 +39,9 @@ void main() {
   // pivoting at the world origin spreads neighbouring particles apart in
   // proportion to the beacon's distance from it, past the noise's correlation
   // length. uNoiseOffset is added after the scaling for the same reason.
+  // uTime arrives pre-divided by TAU, so the field churns at the same rate the
+  // particles move; slowing one alone would change how much structure a
+  // particle sees over its life.
   vec3 samplePoint = local * (uCurlFreq * scaleJitter)
                    + uNoiseOffset
                    + vec3(0.0, uTime * 0.05, uTime * 0.03);

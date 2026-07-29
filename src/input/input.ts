@@ -96,7 +96,7 @@ export function attachInput(el: HTMLElement): () => void {
 
   const onWheel = (e: WheelEvent) => {
     e.preventDefault()
-    input.dolly = clamp(input.dolly - e.deltaY * 0.012, -14, 16)
+    input.dolly = clamp(input.dolly + e.deltaY * 0.012, -14, 16)
     lastInteraction = performance.now()
   }
 
