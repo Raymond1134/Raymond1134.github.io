@@ -24,28 +24,24 @@ void main() {
 
   float ci = aCluster;
 
-  // Skewed toward the head, so each wisp has a dense leading edge thinning to a
-  // sparse tail. Uniform spacing reads as a segment of a ring, not a comet.
+  // Skewed toward the head: uniform spacing reads as a ring segment, not a comet.
   float u = pow(aTrail, 1.3);
 
   /* ---- per-cluster orbit, all derived from the cluster index ---- */
   float cid = ci + 1.0;
 
-  // Orbit normals on a Fibonacci spiral, NOT sampled at random. Random normals
-  // leave the closest pair only ~18 deg apart on some seeds, and two near
-  // coplanar wisps merge into a band. The spiral holds a hard floor between
-  // every pair, for every beacon.
-  //
-  // Per-beacon variety then comes from rotating the whole constellation rigidly
-  // (Rodrigues, below) rather than jittering the points — jitter reintroduces
-  // the collision, dropping the worst case to ~5 deg.
+  // Fibonacci spiral, NOT random normals — random leaves the closest pair only
+  // ~18 deg apart on some seeds and the two wisps merge into a band. Per-beacon
+  // variety comes from the rigid rotation below; jittering these points instead
+  // reintroduces the collision, at ~5 deg worst case.
   float z   = 1.0 - 2.0 * (ci + 0.5) / uClusters;
   float th  = ci * 2.39996323;
   float rxy = sqrt(max(0.0, 1.0 - z * z));
   vec3  N   = vec3(cos(th) * rxy, z, sin(th) * rxy);
 
-  // Rigid rotation about a per-beacon axis. Sampled on the sphere rather than
-  // as a raw vec3, which could normalize a near-zero vector to NaN.
+  // Rodrigues rotation preserves every pairwise angle, so the spiral's spacing
+  // guarantee survives. Axis sampled on the sphere rather than as a raw vec3,
+  // which could normalize a near-zero vector to NaN.
   float rz   = h11(101.0) * 2.0 - 1.0;
   float rth  = h11(103.0) * 6.2831853;
   float rxy2 = sqrt(max(0.0, 1.0 - rz * rz));
@@ -60,10 +56,9 @@ void main() {
   float wob    = 0.30 + h11(cid * 17.1) * 0.35;
   float prate  = (0.05 + h11(cid * 19.3) * 0.09) * (h11(cid * 23.9) < 0.5 ? -1.0 : 1.0);
 
-  // Orbit basis, precessing so each plane also tumbles slowly. Derived
-  // analytically from the FIXED normal N: rebuilding the cross-product basis on
-  // the moving axis would flip `helper` as it crossed vertical and snap the
-  // whole wisp. These stay orthonormal for every pa.
+  // Precessing orbit basis, derived analytically from the FIXED normal N.
+  // Rebuilding the cross-product basis on the moving axis would flip `helper`
+  // as it crossed vertical and snap the whole wisp. Orthonormal for every pa.
   vec3 helper = mix(vec3(0.0, 1.0, 0.0), vec3(1.0, 0.0, 0.0), step(0.95, abs(N.y)));
   vec3 e1 = normalize(cross(N, helper));
   vec3 e2 = normalize(cross(N, e1));
@@ -76,13 +71,12 @@ void main() {
   vec3 P    = -N * sw + radialv * cw;
   vec3 Q    = -e1 * sin(pa) + e2 * cos(pa);
 
-  // The tail lags the head around the orbit. Signed by `speed` so it trails
-  // behind whichever way the wisp is travelling rather than leading it.
+  // Signed by `speed`, so the tail trails whichever way the wisp travels.
   float a = uTime * speed + phase - u * 0.55 * sign(speed);
 
   vec3 pos = (P * cos(a) + Q * sin(a)) * radius;
 
-  // Scatter widens toward the tail, so a wisp frays out instead of ending flat.
+  // Scatter widens toward the tail, so a wisp frays instead of ending flat.
   vec3 jit = vec3(s0, s1, fract(s0 * 3.7 + s1 * 5.3)) - 0.5;
   pos += jit * (0.28 + u * 0.95);
 
@@ -91,8 +85,8 @@ void main() {
 
   float dist = max(-mv.z, 0.001);
 
-  // Squared so the distribution skews small: most motes stay fine dust and only
-  // a few are large, which reads as depth. Tail motes are smaller still.
+  // Squared so the distribution skews small — a linear ramp makes every mote
+  // mid-sized and the wisp flattens.
   float sz = fract(s1 * 5.77 + s2 * 2.13);
   gl_PointSize = clamp(
     uPixelRatio * (0.8 + sz * sz * 4.0) * (1.0 - u * 0.45) * (68.0 / dist),
@@ -100,8 +94,7 @@ void main() {
     12.0 * uPixelRatio
   );
 
-  // Each mote breathes on its own clock, so a wisp shimmers rather than
-  // blinking as one body.
+  // Own clock per mote, so a wisp shimmers rather than blinking as one body.
   vGain = (0.3 + 0.7 * s2) * (0.55 + 0.45 * sin(uTime * (0.6 + s0 * 1.2) + phase * 3.0));
 
   vTrail = u;
