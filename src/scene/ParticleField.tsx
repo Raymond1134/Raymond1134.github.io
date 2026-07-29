@@ -13,15 +13,15 @@ import {
   useStore, PARTICLE_TEX, implodeAmount, getCurrentNode, getPreviousNode, TRAVEL,
 } from '@/state/store'
 
-const SHELL_RADIUS = 46
-const BASE_OPACITY = 0.72
+const SHELL_RADIUS = 36
+const BASE_OPACITY = 0.96
 
 /* Motion slowdown. 1 is the original speed; 1.35 is ~26% slower. */
 const TAU = 1.35
 
 /* Pre-slowdown values */
 const BASE = {
-  shellSoftness: 0.55,
+  shellSoftness: 0.75,
   curlAmp: 11.0,
   swirl: 4.5,
   damping: 0.965,
@@ -30,9 +30,16 @@ const BASE = {
 
 const forceScale = 1 / (TAU * TAU)
 const damping = Math.pow(BASE.damping, 1 / TAU)
-const COLOR_WARMTH = 0.92
+const COLOR_WARMTH = 0.9
 const tmpColor = new THREE.Color()
 const homeVec = new THREE.Vector3()
+
+type Variable = ReturnType<GPUComputationRenderer['addVariable']>
+interface Sim {
+  gpu: GPUComputationRenderer
+  velVar: Variable
+  posVar: Variable
+}
 
 const noiseOffsets = new Map<string, THREE.Vector3>()
 function noiseOffsetFor(id: string): THREE.Vector3 {
@@ -49,8 +56,9 @@ export default function ParticleField() {
   const quality = useStore((s) => s.quality)
   const size = PARTICLE_TEX[quality]
   const points = useRef<THREE.Points>(null!)
+  const simRef = useRef<Sim | null>(null)
 
-  const sim = useMemo(() => {
+  useEffect(() => {
     const gpu = new GPUComputationRenderer(size, size, gl)
     const canRenderFloat = gl.getContext().getExtension('EXT_color_buffer_float') !== null
     if (!canRenderFloat || isCoarsePointer()) gpu.setDataType(THREE.HalfFloatType)
@@ -95,10 +103,13 @@ export default function ParticleField() {
     const err = gpu.init()
     if (err) console.error('GPUComputationRenderer:', err)
 
-    return { gpu, velVar, posVar }
-  }, [gl, size])
+    simRef.current = { gpu, velVar, posVar }
 
-  useEffect(() => () => sim.gpu.dispose(), [sim])
+    return () => {
+      gpu.dispose()
+      simRef.current = null
+    }
+  }, [gl, size])
 
   const geometry = useMemo(() => {
     const count = size * size
@@ -144,6 +155,10 @@ export default function ParticleField() {
   )
 
   useFrame((state, rawDt) => {
+    // Null for the first frame or two, until the effect above has run.
+    const sim = simRef.current
+    if (!sim) return
+
     const dt = Math.min(rawDt, 1 / 30)
     const s = useStore.getState()
     const node = getCurrentNode()

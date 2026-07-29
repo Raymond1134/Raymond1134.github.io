@@ -5,6 +5,7 @@ import { Suspense } from 'react'
 import Scene from '@/scene/Scene'
 import Hud from '@/ui/Hud'
 import TextMode from '@/ui/TextMode'
+import FirstHint from '@/ui/FirstHint'
 import { useStore } from '@/state/store'
 import { useViewport } from '@/ui/useViewport'
 import { isCoarsePointer } from '@/device'
@@ -42,6 +43,7 @@ export default function App() {
       </Canvas>
 
       <Hud />
+      {!textMode && <FirstHint />}
       {textMode && <TextMode />}
     </>
   )

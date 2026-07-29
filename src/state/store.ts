@@ -6,7 +6,7 @@ import { isCoarsePointer, canHover } from '@/device'
 export type Phase = 'idle' | 'gather' | 'veil' | 'disperse'
 export type Quality = 'low' | 'medium' | 'high' | 'ultra'
 
-export const PARTICLE_TEX = { low: 256, medium: 512, high: 1024, ultra: 2048 } as const
+export const PARTICLE_TEX = { low: 360, medium: 512, high: 780, ultra: 1024 } as const
 
 /* Timeline, in seconds, of the travel sequence. */
 export const TRAVEL = { gather: 0.9, veil: 0.5, disperse: 1.2 } as const

@@ -1,0 +1,52 @@
+.hint {
+  position: fixed;
+  z-index: 40;
+  left: 50%;
+  bottom: calc(var(--sab) + 88px);
+  transform: translateX(-50%);
+
+  margin: 0;
+  max-width: min(92vw, 460px);
+  text-align: center;
+
+  font-size: 12px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--ink);
+
+  text-shadow:
+    0 0 14px rgba(3, 4, 10, 0.95),
+    0 1px 3px rgba(3, 4, 10, 0.95);
+
+  /* Never intercept a drag or a tap meant for a beacon underneath. */
+  pointer-events: none;
+  opacity: 0.82;
+  animation: hint-in 600ms ease both;
+}
+
+@keyframes hint-in {
+  from { opacity: 0; }
+  to { opacity: 0.82; }
+}
+
+/* Dropping the animation lets the transition take over from the current value. */
+.hint[data-hide='true'] {
+  animation: none;
+  opacity: 0;
+  transition: opacity 600ms ease;
+}
+
+/* Compact puts the HUD in a bottom bar, so clear it. */
+@media (pointer: coarse) and (max-width: 600px) {
+  .hint {
+    bottom: calc(var(--sab) + 108px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hint,
+  .hint[data-hide='true'] {
+    animation: none;
+    transition: none;
+  }
+}
