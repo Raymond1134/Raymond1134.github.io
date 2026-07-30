@@ -203,6 +203,10 @@ export default function Beacon({ node, role }: Props) {
 
     mm.uniforms.uTime.value = t
     mm.uniforms.uIntensity.value = gain * MOTE_DENSITY_TRIM * (role === 'distant' ? 0.5 : 1) * (1 + h * 0.6)
+    
+    // Tracks AdaptiveDpr: when the pixel ratio drops, point sizes must drop
+    // with it or the motes bloat on the upscaled buffer.
+    mm.uniforms.uPixelRatio.value = state.gl.getPixelRatio()
     motes.current.scale.setScalar(1 + h * 0.6)
 
     const d = state.camera.position.distanceTo(node.worldPosition)

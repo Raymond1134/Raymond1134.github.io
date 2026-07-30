@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react'
 import { useStore } from '@/state/store'
 import '@/styles/hint.css'
 
-
 const SHOW_EVERY_LOAD: boolean = true
 const HINT_KEY = 'aether.hint.seen.v2'
 const HINT_MS = 6000
@@ -98,7 +97,7 @@ export default function FirstHint() {
 
   return (
     <p className="hint" data-hide={hiding} role="status">
-      {coarse ? 'Drag to look · Tap a light to travel' : 'Move to look · Click a light to travel'}
+      {coarse ? 'Drag to look · Tap a light to travel' : 'Drag to look · Click a light to travel'}
     </p>
   )
 }

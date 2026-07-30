@@ -1,11 +1,19 @@
-import { isCoarsePointer } from '@/device'
-
 /* Movement (px) beyond which a pointer sequence is a drag, not a tap. */
 export const TAP_SLOP = 12
 
+/* A drag is meant to carry the bit of space under the pointer along with it,
+ * so the right value is kept up to date by CameraRig via `setLookScale`. */
+let lookScale = 0.0012
+
+export function setLookScale(radiansPerPixel: number) {
+  lookScale = radiansPerPixel
+}
+
+/* Just short of straight up/down — at exactly 90 the view rolls. */
+const MAX_PITCH = Math.PI * 0.48
+
 export const input = {
-  /* Look offset, both axes normalised to roughly [-1, 1]. */
-  lean: { x: 0, y: 0 },
+  look: { yaw: 0, pitch: 0 },
 
   /* Dolly offset in world units; negative = closer. */
   dolly: 0,
@@ -16,7 +24,7 @@ export const input = {
   /* True while at least one pointer is down. */
   dragging: false,
 
-  /* Set by the gyro handler when enabled; added to `lean` when non-null. */
+  /* Set by the gyro handler when enabled; added to `look` when non-null. */
   gyro: null as { x: number; y: number } | null
 }
 
@@ -37,8 +45,6 @@ const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v
 const gap = (a: Tracked, b: Tracked) => Math.hypot(a.x - b.x, a.y - b.y)
 
 export function attachInput(el: HTMLElement): () => void {
-  const coarse = isCoarsePointer()
-
   const onDown = (e: PointerEvent) => {
     active.set(e.pointerId, { id: e.pointerId, x: e.clientX, y: e.clientY })
     el.setPointerCapture?.(e.pointerId)
@@ -57,13 +63,6 @@ export function attachInput(el: HTMLElement): () => void {
   }
 
   const onMove = (e: PointerEvent) => {
-    if (!coarse && active.size === 0) {
-      const r = el.getBoundingClientRect()
-      input.lean.x = ((e.clientX - r.left) / r.width) * 2 - 1
-      input.lean.y = -(((e.clientY - r.top) / r.height) * 2 - 1)
-      return
-    }
-
     const prev = active.get(e.pointerId)
     if (!prev) return
 
@@ -80,9 +79,8 @@ export function attachInput(el: HTMLElement): () => void {
       return
     }
 
-    const r = el.getBoundingClientRect()
-    input.lean.x = clamp(input.lean.x + (dx / r.width) * 2.6, -1, 1)
-    input.lean.y = clamp(input.lean.y - (dy / r.height) * 2.6, -1, 1)
+    input.look.yaw += dx * lookScale
+    input.look.pitch = clamp(input.look.pitch + dy * lookScale, -MAX_PITCH, MAX_PITCH)
   }
 
   const onUp = (e: PointerEvent) => {
@@ -125,18 +123,14 @@ export function attachInput(el: HTMLElement): () => void {
 }
 
 export function recentre() {
-  input.lean.x = 0
-  input.lean.y = 0
+  input.look.yaw = 0
+  input.look.pitch = 0
   input.dolly = 0
 }
 
-/* Called each frame: drifts the view back toward centre after a period of stillness. */
 export function settleInput(dt: number) {
   if (input.dragging) return
   if ((performance.now() - lastInteraction) / 1000 < 2.5) return
 
-  const k = 1 - Math.pow(0.85, dt)
-  input.lean.x += -input.lean.x * k
-  input.lean.y += -input.lean.y * k
-  input.dolly += -input.dolly * k
+  input.dolly += -input.dolly * (1 - Math.pow(0.85, dt))
 }

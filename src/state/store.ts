@@ -9,7 +9,7 @@ export type Quality = 'low' | 'medium' | 'high' | 'ultra'
 export const PARTICLE_TEX = { low: 360, medium: 512, high: 780, ultra: 1024 } as const
 
 /* Timeline, in seconds, of the travel sequence. */
-export const TRAVEL = { gather: 0.9, veil: 0.5, disperse: 1.2 } as const
+export const TRAVEL = { gather: 0.7, veil: 1.0, disperse: 0.5 } as const
 export const TRAVEL_TOTAL = TRAVEL.gather + TRAVEL.veil + TRAVEL.disperse
 
 interface State {
@@ -56,7 +56,12 @@ export const useStore = create<State>((set, get) => ({
   pendingId: null,
   phase: 'idle',
   travelClock: 0,
-  quality: 'high',
+  /**
+   * Until the Phase-10 governor exists, the initial tier is a guess from the
+   * pointer: 780² particles is fine on a desktop GPU and a space heater on a
+   * phone. Coarse pointers start one tier down.
+   */
+  quality: isCoarsePointer() ? 'medium' : 'high',
   reducedMotion: typeof matchMedia !== 'undefined' && matchMedia('(prefers-reduced-motion: reduce)').matches,
   audioEnabled: false,
   mapOpen: false,
@@ -130,14 +135,3 @@ export const getPreviousNode = () => {
 export const travelProgress = (s: { phase: Phase; travelClock: number }) =>
     s.phase === 'idle' ? 0 : Math.min(1, s.travelClock / TRAVEL_TOTAL)
 
-/* The implosion amount: 0 idle to 1 fully engulfed to 0 dispersed. */
-export function implodeAmount(phase: Phase, clock: number): number {
-  if (phase === 'idle') return 0
-  if (phase === 'gather') {
-    const t = clock / TRAVEL.gather
-    return t * t * t
-  }
-  if (phase === 'veil') return 1
-  const t = (clock - TRAVEL.gather - TRAVEL.veil) / TRAVEL.disperse
-  return Math.pow(1 - t, 3)
-}

@@ -7,13 +7,12 @@ uniform vec3  uColorAccent;
 uniform float uOpacity;
 uniform float uSpeedScale;
 uniform float uFogDensity;
-uniform float uImplode;
 
 varying float vSpeed;
-varying float vLife;
 varying float vDepth;
 varying float vGain;
 varying float vSeed;
+varying float vFade;
 
 void main() {
   // Soft round sprite, no texture needed. `r2` is 0 at the centre, 1 at the edge.
@@ -48,19 +47,17 @@ void main() {
   // the "spark", and it stops working the moment it's common.
   col = mix(col, uColorAccent, smoothstep(0.88, 1.0, heat) * 0.55);
 
-  float birth = smoothstep(1.0, 0.88, vLife);
-  float death = smoothstep(0.0, 0.14, vLife);
   float fog = exp(-vDepth * uFogDensity);
 
-  // The camera sits INSIDE the swarm, so without a near-fade the closest
-  // particles smear across the viewport and the field reads as fog. Suppressed
-  // during the implosion, where engulfing the camera is the point.
-  float near = mix(smoothstep(6.0, 26.0, vDepth), 1.0, uImplode);
+  // Only the very nearest are pulled back. The camera flies THROUGH this field,
+  // so motes have to stay visible as they stream past — the old 6..26 fade
+  // blanked out everything you were passing, which is the part worth seeing.
+  float near = smoothstep(1.0, 10.0, vDepth);
 
   // Base brightness is deliberately low: additive blending sums overlapping
   // sprites, so a high floor saturates to white once the field gets dense. Only
-  // fast particles push above 1.0, which is the headroom the bloom pass needs.
+  // fast particles push above 1.0.
   vec3 lit = col * (0.30 + heat * 1.05);
 
-  gl_FragColor = vec4(lit, alpha * uOpacity * vGain * birth * death * fog * near);
+  gl_FragColor = vec4(lit, alpha * uOpacity * vGain * fog * near * vFade);
 }

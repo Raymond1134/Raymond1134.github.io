@@ -31,9 +31,10 @@ export default function Hud() {
   }, [travelTo])
 
   const targets = neighborsOf(graph, currentId)
+  const dimmed = phase === 'gather' || phase === 'veil'
 
   return (
-    <nav className="hud" aria-label="Site controls">
+    <nav className="hud" aria-label="Site controls" data-dimmed={dimmed}>
       {targets.map((id) => (
         <button key={id} onClick={() => travelTo(id)} disabled={phase !== 'idle'}>
           {graph.nodes.get(id)?.title ?? id}

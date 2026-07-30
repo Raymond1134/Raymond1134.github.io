@@ -1,4 +1,4 @@
-import { useMemo, useRef, useEffect } from 'react'
+import { useRef, useEffect, useState } from 'react'
 import { useFrame, useThree } from '@react-three/fiber'
 import * as THREE from 'three'
 import { GPUComputationRenderer } from 'three/addons/misc/GPUComputationRenderer.js'
@@ -7,204 +7,175 @@ import positionShader from '@/shaders/sim/position.frag'
 import particleVert from '@/shaders/render/particle.vert'
 import particleFrag from '@/shaders/render/particle.frag'
 import { site } from '@/content'
-import { hash01 } from '@/content/layout'
 import { isCoarsePointer } from '@/device'
-import {
-  useStore, PARTICLE_TEX, implodeAmount, getCurrentNode, getPreviousNode, TRAVEL,
-} from '@/state/store'
+import { PARTICLE_ORDER } from './renderOrder'
+import { useStore, PARTICLE_TEX } from '@/state/store'
 
-const SHELL_RADIUS = 36
+/* Half-size of the cube the field wraps in, centred on the viewer. */
+const BOX_HALF = 70
+
+const FADE_START = 40
+const FADE_END = 66
 const BASE_OPACITY = 0.96
 
 /* Motion slowdown. 1 is the original speed; 1.35 is ~26% slower. */
 const TAU = 1.35
 
-/* Pre-slowdown values */
-const BASE = {
-  shellSoftness: 0.75,
-  curlAmp: 11.0,
-  swirl: 4.5,
-  damping: 0.965,
-  speedScale: 22.0,
-} as const
+/* Pre-slowdown values. */
+const BASE = { curlAmp: 11.0, damping: 0.965, speedScale: 22.0 } as const
+
+const MAX_SPEED = 42.0
+const COLOR_WARMTH = 0.9
 
 const forceScale = 1 / (TAU * TAU)
 const damping = Math.pow(BASE.damping, 1 / TAU)
-const COLOR_WARMTH = 0.9
-const tmpColor = new THREE.Color()
-const homeVec = new THREE.Vector3()
 
 type Variable = ReturnType<GPUComputationRenderer['addVariable']>
-interface Sim {
+interface FieldAssets {
   gpu: GPUComputationRenderer
   velVar: Variable
   posVar: Variable
+  geometry: THREE.BufferGeometry
+  material: THREE.ShaderMaterial
 }
 
-const noiseOffsets = new Map<string, THREE.Vector3>()
-function noiseOffsetFor(id: string): THREE.Vector3 {
-  let v = noiseOffsets.get(id)
-  if (!v) {
-    v = new THREE.Vector3(hash01(id, 11), hash01(id, 22), hash01(id, 33)).multiplyScalar(64)
-    noiseOffsets.set(id, v)
+function buildAssets(gl: THREE.WebGLRenderer, size: number): FieldAssets {
+  const gpu = new GPUComputationRenderer(size, size, gl)
+  const canRenderFloat = gl.getContext().getExtension('EXT_color_buffer_float') !== null
+  if (!canRenderFloat || isCoarsePointer()) gpu.setDataType(THREE.HalfFloatType)
+
+  const pos0 = gpu.createTexture()
+  const vel0 = gpu.createTexture()
+  seedTextures(pos0, vel0, size)
+
+  const velVar = gpu.addVariable('textureVelocity', velocityShader, vel0)
+  const posVar = gpu.addVariable('texturePosition', positionShader, pos0)
+
+  gpu.setVariableDependencies(velVar, [velVar, posVar])
+  gpu.setVariableDependencies(posVar, [velVar, posVar])
+
+  Object.assign(velVar.material.uniforms, {
+    uTime: { value: 0 },
+    uDt: { value: 0 },
+    uCurlFreq: { value: 0.028 },
+    uCurlAmp: { value: BASE.curlAmp * forceScale },
+    uDamping: { value: damping },
+    uMaxSpeed: { value: MAX_SPEED },
+  })
+
+  Object.assign(posVar.material.uniforms, {
+    uDt: { value: 0 },
+    uCenter: { value: new THREE.Vector3() },
+    uBoxHalf: { value: BOX_HALF },
+  })
+
+  const err = gpu.init()
+  if (err) console.error('GPUComputationRenderer:', err)
+
+  /* One vertex per texel; aRef is the texel each vertex reads its position from. */
+  const count = size * size
+  const refs = new Float32Array(count * 2)
+  for (let i = 0; i < count; i++) {
+    refs[i * 2 + 0] = (i % size) / size + 0.5 / size
+    refs[i * 2 + 1] = Math.floor(i / size) / size + 0.5 / size
   }
-  return v
+  const geometry = new THREE.BufferGeometry()
+  geometry.setAttribute('aRef', new THREE.BufferAttribute(refs, 2))
+  geometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(count * 3), 3))
+  geometry.boundingSphere = new THREE.Sphere(new THREE.Vector3(), 1e4)
+
+  const material = new THREE.ShaderMaterial({
+    vertexShader: particleVert,
+    fragmentShader: particleFrag,
+    uniforms: {
+      uPositions: { value: null },
+      uVelocities: { value: null },
+      uSize: { value: 1.0 },
+      uPixelRatio: { value: Math.min(window.devicePixelRatio, 2) },
+      uTime: { value: 0 },
+      uCenter: { value: new THREE.Vector3() },
+      uFadeStart: { value: FADE_START },
+      uFadeEnd: { value: FADE_END },
+      uOpacity: { value: BASE_OPACITY },
+      uSpeedScale: { value: (BASE.speedScale / TAU) * COLOR_WARMTH },
+      uFogDensity: { value: 0.005 },
+      uColorCold: { value: new THREE.Color(site.meta.themeColorCold) },
+      uColorMid: { value: new THREE.Color(site.meta.themeColorMid) },
+      uColorHot: { value: new THREE.Color(site.meta.themeColorHot) },
+      uColorAccent: { value: new THREE.Color(site.meta.themeColorAccent) },
+    },
+    transparent: true,
+    depthWrite: false,
+    depthTest: true,
+    blending: THREE.AdditiveBlending,
+    toneMapped: false,
+  })
+
+  return { gpu, velVar, posVar, geometry, material }
 }
 
 export default function ParticleField() {
   const gl = useThree((s) => s.gl)
   const quality = useStore((s) => s.quality)
   const size = PARTICLE_TEX[quality]
-  const points = useRef<THREE.Points>(null!)
-  const simRef = useRef<Sim | null>(null)
+  const assetsRef = useRef<FieldAssets | null>(null)
+  const [assets, setAssets] = useState<FieldAssets | null>(null)
 
   useEffect(() => {
-    const gpu = new GPUComputationRenderer(size, size, gl)
-    const canRenderFloat = gl.getContext().getExtension('EXT_color_buffer_float') !== null
-    if (!canRenderFloat || isCoarsePointer()) gpu.setDataType(THREE.HalfFloatType)
-
-    const pos0 = gpu.createTexture()
-    const vel0 = gpu.createTexture()
-    seedTextures(pos0, vel0, size)
-
-    const velVar = gpu.addVariable('textureVelocity', velocityShader, vel0)
-    const posVar = gpu.addVariable('texturePosition', positionShader, pos0)
-
-    gpu.setVariableDependencies(velVar, [velVar, posVar])
-    gpu.setVariableDependencies(posVar, [velVar, posVar])
-
-    Object.assign(velVar.material.uniforms, {
-      uTime: { value: 0 },
-      uDt: { value: 0 },
-      uHome: { value: new THREE.Vector3() },
-      uFocus: { value: new THREE.Vector3() },
-      uImplode: { value: 0 },
-      uShellRadius: { value: SHELL_RADIUS },
-      uShellSoftness: { value: BASE.shellSoftness * forceScale },
-      uNoiseOffset: { value: new THREE.Vector3() },
-      uCurlFreq: { value: 0.028 },
-      uCurlAmp: { value: BASE.curlAmp * forceScale },
-      uSwirl: { value: BASE.swirl * forceScale },
-      uDamping: { value: damping },
-
-      /* NOT scaled by TAU. */
-      uMaxSpeed: { value: 42.0 },
-    })
-
-    Object.assign(posVar.material.uniforms, {
-      uTime: { value: 0 },
-      uDt: { value: 0 },
-      uHome: { value: new THREE.Vector3() },
-      uShellRadius: { value: SHELL_RADIUS },
-      uLifeScale: { value: 1 },
-      uRespawn: { value: 1 },
-    })
-
-    const err = gpu.init()
-    if (err) console.error('GPUComputationRenderer:', err)
-
-    simRef.current = { gpu, velVar, posVar }
-
+    const built = buildAssets(gl, size)
+    assetsRef.current = built
+    setAssets(built)
     return () => {
-      gpu.dispose()
-      simRef.current = null
+      built.gpu.dispose()
+      built.geometry.dispose()
+      built.material.dispose()
+      assetsRef.current = null
     }
   }, [gl, size])
 
-  const geometry = useMemo(() => {
-    const count = size * size
-    const refs = new Float32Array(count * 2)
-    for (let i = 0; i < count; i++) {
-      refs[i * 2 + 0] = (i % size) / size + 0.5 / size
-      refs[i * 2 + 1] = Math.floor(i / size) / size + 0.5 / size
-    }
-    const g = new THREE.BufferGeometry()
-    g.setAttribute('aRef', new THREE.BufferAttribute(refs, 2))
-    g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(count * 3), 3))
-    g.boundingSphere = new THREE.Sphere(new THREE.Vector3(), 1e4)
-    return g
-  }, [size])
-
-  const material = useMemo(
-    () =>
-      new THREE.ShaderMaterial({
-        vertexShader: particleVert,
-        fragmentShader: particleFrag,
-        uniforms: {
-          uPositions: { value: null },
-          uVelocities: { value: null },
-          uSize: { value: 1.0 },
-          uPixelRatio: { value: Math.min(window.devicePixelRatio, 2) },
-          uImplode: { value: 0 },
-          uTime: { value: 0 },
-          uOpacity: { value: BASE_OPACITY },
-          uSpeedScale: { value: (BASE.speedScale / TAU) * COLOR_WARMTH },
-          uFogDensity: { value: 0.005 },
-          uColorCold: { value: new THREE.Color(site.meta.themeColorCold) },
-          uColorMid: { value: new THREE.Color(site.meta.themeColorMid) },
-          uColorHot: { value: new THREE.Color(site.meta.themeColorHot) },
-          uColorAccent: { value: new THREE.Color(site.meta.themeColorAccent) },
-        },
-        transparent: true,
-        depthWrite: false,
-        depthTest: true,
-        blending: THREE.AdditiveBlending,
-        toneMapped: false,
-      }),
-    [],
-  )
-
   useFrame((state, rawDt) => {
     // Null for the first frame or two, until the effect above has run.
-    const sim = simRef.current
-    if (!sim) return
+    const a = assetsRef.current
+    if (!a) return
 
     const dt = Math.min(rawDt, 1 / 30)
-    const s = useStore.getState()
-    const node = getCurrentNode()
-    const prev = getPreviousNode()
-    const implode = implodeAmount(s.phase, s.travelClock)
-
-    if (s.phase === 'disperse' && prev) {
-      const t = (s.travelClock - TRAVEL.gather - TRAVEL.veil) / TRAVEL.disperse
-      homeVec.copy(prev.worldPosition).lerp(node.worldPosition, t * t * (3 - 2 * t))
-    }
-    else homeVec.copy(node.worldPosition)
-
-    const vu = sim.velVar.material.uniforms
-    const pu = sim.posVar.material.uniforms
     const simTime = state.clock.elapsedTime / TAU
+    const cam = state.camera.position
+
+    const vu = a.velVar.material.uniforms
+    const pu = a.posVar.material.uniforms
+    const mu = a.material.uniforms
 
     vu.uTime.value = simTime
     vu.uDt.value = dt
-    vu.uImplode.value = implode
-    vu.uHome.value.copy(homeVec)
-    vu.uFocus.value.copy(state.camera.position)
-    vu.uNoiseOffset.value.copy(noiseOffsetFor(s.currentId))
-    vu.uShellRadius.value = SHELL_RADIUS * (1 - implode * 0.55)
 
-    pu.uTime.value = simTime
     pu.uDt.value = dt
-    pu.uHome.value.copy(homeVec)
-    pu.uShellRadius.value = vu.uShellRadius.value
-    pu.uRespawn.value = s.phase === 'gather' || s.phase === 'veil' ? 0 : 1
-    pu.uLifeScale.value = (s.phase === 'disperse' ? 2.2 : 1.0) / TAU
+    pu.uCenter.value.copy(cam)
 
-    // Tint the swarm toward the current beacon's colour.
-    tmpColor.set(node.color ?? site.meta.themeColorMid)
-    ;(material.uniforms.uColorMid.value as THREE.Color).lerp(tmpColor, 1 - Math.pow(0.06, dt))
-    material.uniforms.uImplode.value = implode
-    material.uniforms.uTime.value = state.clock.elapsedTime
-    material.uniforms.uOpacity.value = BASE_OPACITY * (1.0 + implode * 0.9)
+    mu.uTime.value = state.clock.elapsedTime
+    ;(mu.uCenter.value as THREE.Vector3).copy(cam)
+    // Tracks AdaptiveDpr: when the pixel ratio drops, point sizes must drop
+    // with it or every mote bloats on the upscaled buffer.
+    mu.uPixelRatio.value = state.gl.getPixelRatio()
 
-    sim.gpu.compute()
-    material.uniforms.uPositions.value = sim.gpu.getCurrentRenderTarget(sim.posVar).texture
-    material.uniforms.uVelocities.value = sim.gpu.getCurrentRenderTarget(sim.velVar).texture
+    a.gpu.compute()
+    mu.uPositions.value = a.gpu.getCurrentRenderTarget(a.posVar).texture
+    mu.uVelocities.value = a.gpu.getCurrentRenderTarget(a.velVar).texture
   })
 
-  return <points ref={points} geometry={geometry} material={material} frustumCulled={false} />
+  if (!assets) return null
+
+  return (
+    <points
+      geometry={assets.geometry}
+      material={assets.material}
+      frustumCulled={false}
+      renderOrder={PARTICLE_ORDER}
+    />
+  )
 }
 
+/** Uniform through the wrap box, since the field has no centre of its own. */
 function seedTextures(pos: THREE.DataTexture, vel: THREE.DataTexture, size: number) {
   const p = pos.image.data as Float32Array
   const v = vel.image.data as Float32Array
@@ -212,15 +183,11 @@ function seedTextures(pos: THREE.DataTexture, vel: THREE.DataTexture, size: numb
 
   for (let i = 0; i < count; i++) {
     const i4 = i * 4
-    const u = Math.random() * 2 - 1
-    const theta = Math.random() * Math.PI * 2
-    const r = Math.sqrt(1 - u * u)
-    const radius = SHELL_RADIUS * (0.4 + Math.random() * 1.0)
 
-    p[i4 + 0] = Math.cos(theta) * r * radius
-    p[i4 + 1] = u * radius
-    p[i4 + 2] = Math.sin(theta) * r * radius
-    p[i4 + 3] = Math.random()
+    p[i4 + 0] = (Math.random() * 2 - 1) * BOX_HALF
+    p[i4 + 1] = (Math.random() * 2 - 1) * BOX_HALF
+    p[i4 + 2] = (Math.random() * 2 - 1) * BOX_HALF
+    p[i4 + 3] = 1
 
     v[i4 + 0] = (Math.random() - 0.5) * 2
     v[i4 + 1] = (Math.random() - 0.5) * 2

@@ -33,11 +33,12 @@ function ringRadius(depth: number): number {
   
 /* Half-angle of the cone that children are scattered into, in radians. */
 function coneSpread(depth: number, childCount: number): number {
-  if (depth === 0) return Math.PI * 0.30
+  if (depth === 0) return Math.PI * 0.45
   return Math.min(Math.PI * 0.42, 0.5 + childCount * 0.16)
 }
 
-const MAX_POLAR = Math.PI * 0.167
+/* The cone is only a bias. */
+const MAX_POLAR = Math.PI * 0.33
   
 export function buildGraph(site: Site): Graph {
   const byId = new Map(site.beacons.map((b) => [b.id, b]))
