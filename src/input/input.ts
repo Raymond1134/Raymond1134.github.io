@@ -128,9 +128,22 @@ export function recentre() {
   input.dolly = 0
 }
 
+/* Seconds of stillness before the dolly eases home / the view starts drifting. */
+const DOLLY_SETTLE_AFTER = 2.5
+const DRIFT_AFTER = 7
+
+const TWO_PI = Math.PI * 2
+
 export function settleInput(dt: number) {
   if (input.dragging) return
-  if ((performance.now() - lastInteraction) / 1000 < 2.5) return
+  const still = (performance.now() - lastInteraction) / 1000
+  if (still < DOLLY_SETTLE_AFTER) return
 
   input.dolly += -input.dolly * (1 - Math.pow(0.85, dt))
+  
+  if (still < DRIFT_AFTER) return
+  const k = 1 - Math.pow(0.88, dt)
+  const home = Math.round(input.look.yaw / TWO_PI) * TWO_PI
+  input.look.yaw += (home - input.look.yaw) * k
+  input.look.pitch -= input.look.pitch * k
 }

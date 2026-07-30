@@ -68,7 +68,7 @@ export default function CameraRig() {
   const height = useThree((s) => s.size.height)
   const lookTarget = useRef(new THREE.Vector3())
 
-  /* Captured on the first gather frame, released once the veil is over. */
+  /* Captured on the first turn frame, released once the flight lands. */
   const frozenPos = useRef<THREE.Vector3 | null>(null)
   const frozenQuat = useRef(new THREE.Quaternion())
 
@@ -92,7 +92,7 @@ export default function CameraRig() {
     const panel = panelSizeFor(s.compact, s.portrait)
     const dist = anchorDistance(camera, panel.w, panel.h) + input.dolly
 
-    if (s.phase === 'gather') {
+    if (s.phase === 'turn') {
       const target = s.pendingId ? s.graph.nodes.get(s.pendingId) : null
       const dest = target ? target.worldPosition : current.worldPosition
 
@@ -106,7 +106,7 @@ export default function CameraRig() {
         }
       }
       camera.position.copy(frozenPos.current)
-      const t = THREE.MathUtils.clamp(s.travelClock / TRAVEL.gather, 0, 1)
+      const t = THREE.MathUtils.clamp(s.travelClock / TRAVEL.turn, 0, 1)
       const e = t * t * (3 - 2 * t)
 
       baseTowards(camera.position, dest, toQuat)
@@ -119,8 +119,8 @@ export default function CameraRig() {
       return
     }
 
-    if (s.phase === 'veil') {
-      const t = (s.travelClock - TRAVEL.gather) / TRAVEL.veil
+    if (s.phase === 'flight') {
+      const t = (s.travelClock - TRAVEL.turn) / TRAVEL.flight
   
       // Cubic ease-in-out
       const e = t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2

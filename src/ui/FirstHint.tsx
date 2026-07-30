@@ -2,44 +2,14 @@ import { useEffect, useState } from 'react'
 import { useStore } from '@/state/store'
 import '@/styles/hint.css'
 
-const SHOW_EVERY_LOAD: boolean = true
-const HINT_KEY = 'aether.hint.seen.v2'
 const HINT_MS = 6000
 const FADE_MS = 700
 const GRACE_MS = 1500
 
-function forced(): boolean {
-  try {
-    return new URLSearchParams(location.search).has('hint')
-  }
-  catch {
-    return false
-  }
-}
-
-function seenBefore(): boolean {
-  if (SHOW_EVERY_LOAD || forced()) return false
-  try {
-    return localStorage.getItem(HINT_KEY) === '1'
-  }
-  catch {
-    return true
-  }
-}
-
-function markSeen() {
-  if (SHOW_EVERY_LOAD || forced()) return
-  try {
-    localStorage.setItem(HINT_KEY, '1')
-  }
-  catch {
-    /* nothing to do */
-  }
-}
-
+/* Shown on every load; fades after a few seconds or on the first input. */
 export default function FirstHint() {
   const coarse = useStore((s) => s.coarse)
-  const [mounted, setMounted] = useState(() => !seenBefore())
+  const [mounted, setMounted] = useState(true)
 
   /* Only drives the fade-OUT; the fade-in is a CSS animation (see hint.css). */
   const [hiding, setHiding] = useState(false)
@@ -53,7 +23,6 @@ export default function FirstHint() {
       if (done) return
       done = true
 
-      markSeen()
       setHiding(true)
       unmountTimer = setTimeout(() => setMounted(false), FADE_MS)
     }

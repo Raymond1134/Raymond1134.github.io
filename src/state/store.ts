@@ -3,14 +3,19 @@ import { graph, site } from '@/content'
 import type { Graph } from '@/content/layout'
 import { isCoarsePointer, canHover } from '@/device'
 
-export type Phase = 'idle' | 'gather' | 'veil' | 'disperse'
+/**
+ * turn = pivot in place to face the destination, flight = the move itself
+ * (covered by the veil scrim), settle = parked at the new anchor while the
+ * scrim reopens.
+ */
+export type Phase = 'idle' | 'turn' | 'flight' | 'settle'
 export type Quality = 'low' | 'medium' | 'high' | 'ultra'
 
-export const PARTICLE_TEX = { low: 360, medium: 512, high: 780, ultra: 1024 } as const
+export const PARTICLE_TEX = { low: 512, medium: 720, high: 1024, ultra: 1280 } as const
 
 /* Timeline, in seconds, of the travel sequence. */
-export const TRAVEL = { gather: 0.7, veil: 1.0, disperse: 0.5 } as const
-export const TRAVEL_TOTAL = TRAVEL.gather + TRAVEL.veil + TRAVEL.disperse
+export const TRAVEL = { turn: 0.7, flight: 1.0, settle: 0.5 } as const
+export const TRAVEL_TOTAL = TRAVEL.turn + TRAVEL.flight + TRAVEL.settle
 
 interface State {
   graph: Graph
@@ -83,7 +88,7 @@ export const useStore = create<State>((set, get) => ({
       set({ previousId: s.currentId, currentId: id, pendingId: null, phase: 'idle', travelClock: 0, mapOpen: false })
       return
     }
-    set({ pendingId: id, phase: 'gather', travelClock: 0, mapOpen: false, hoveredId: null })
+    set({ pendingId: id, phase: 'turn', travelClock: 0, mapOpen: false, hoveredId: null })
   },
 
   tickTravel: (dt) => {
@@ -91,20 +96,21 @@ export const useStore = create<State>((set, get) => ({
     if (s.phase === 'idle') return
     const t = s.travelClock + dt
 
-    if (s.phase === 'gather' && t >= TRAVEL.gather) {
+    if (s.phase === 'turn' && t >= TRAVEL.turn) {
+      // Identity swaps as the flight begins, so the whole move happens as `current`.
       set({
-        phase: 'veil',
+        phase: 'flight',
         travelClock: t,
         previousId: s.currentId,
         currentId: s.pendingId ?? s.currentId,
       })
       return
     }
-    if (s.phase === 'veil' && t >= TRAVEL.gather + TRAVEL.veil) {
-      set({ phase: 'disperse', travelClock: t })
+    if (s.phase === 'flight' && t >= TRAVEL.turn + TRAVEL.flight) {
+      set({ phase: 'settle', travelClock: t })
       return
     }
-    if (s.phase === 'disperse' && t >= TRAVEL_TOTAL) {
+    if (s.phase === 'settle' && t >= TRAVEL_TOTAL) {
       set({ phase: 'idle', travelClock: 0, pendingId: null })
       return
     }

@@ -12,7 +12,7 @@ import { PARTICLE_ORDER } from './renderOrder'
 import { useStore, PARTICLE_TEX } from '@/state/store'
 
 /* Half-size of the cube the field wraps in, centred on the viewer. */
-const BOX_HALF = 70
+const BOX_HALF = 60
 
 const FADE_START = 40
 const FADE_END = 66
@@ -124,6 +124,9 @@ export default function ParticleField() {
   useEffect(() => {
     const built = buildAssets(gl, size)
     assetsRef.current = built
+    // GPU handles are an external resource this effect owns; deriving them
+    // during render is exactly the useMemo arrangement StrictMode breaks.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setAssets(built)
     return () => {
       built.gpu.dispose()

@@ -31,7 +31,9 @@ export default function Hud() {
   }, [travelTo])
 
   const targets = neighborsOf(graph, currentId)
-  const dimmed = phase === 'gather' || phase === 'veil'
+
+  /* Faded out through the turn and the flight. */
+  const dimmed = phase === 'turn' || phase === 'flight'
 
   return (
     <nav className="hud" aria-label="Site controls" data-dimmed={dimmed}>

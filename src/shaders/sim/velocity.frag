@@ -19,6 +19,13 @@ void main() {
   vec3 vel = velData.xyz;
   float seed = velData.w;
 
+  // Sampled from WORLD position at a fixed frequency, so the field belongs to
+  // the universe rather than the viewer. Per-particle variety is amplitude
+  // only — scaling the sample point instead would drag neighbours onto
+  // unrelated parts of the noise and the medium stops reading as continuous.
+  vec3 samplePoint = pos * uCurlFreq + vec3(0.0, uTime * 0.05, uTime * 0.03);
+  vec3 force = curlNoise(samplePoint, 0.35) * uCurlAmp * (0.55 + 0.9 * seed);
+
   vel += force * uDt;
 
   vel *= pow(uDamping, uDt * 60.0);   // frame-rate independent

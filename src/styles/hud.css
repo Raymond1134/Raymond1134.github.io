@@ -13,8 +13,8 @@
   transition: opacity 320ms ease;
 }
 
-/* Under the veil. pointer-events off so a click during the whiteout can't hit
-   a button that is about to be replaced by the next beacon's neighbours. */
+/* Mid-travel. pointer-events off so a click can't hit a button that is about
+   to be replaced by the next beacon's neighbours. */
 .hud[data-dimmed='true'] {
   opacity: 0;
   pointer-events: none;
