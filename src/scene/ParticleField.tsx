@@ -22,7 +22,7 @@ const BASE_OPACITY = 0.96
 const TAU = 1.35
 
 /* Pre-slowdown values. */
-const BASE = { curlAmp: 11.0, damping: 0.965, speedScale: 22.0 } as const
+const BASE = { curlAmp: 22.0, damping: 0.93, speedScale: 22.0 } as const
 
 const MAX_SPEED = 42.0
 const COLOR_WARMTH = 0.9
