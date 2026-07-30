@@ -114,12 +114,29 @@ function buildAssets(gl: THREE.WebGLRenderer, size: number): FieldAssets {
   return { gpu, velVar, posVar, geometry, material }
 }
 
+function positionOnlyStep(a: FieldAssets, dt: number) {
+  const gpu = a.gpu as GPUComputationRenderer & { currentTextureIndex: number }
+  const cur = gpu.currentTextureIndex
+  const next = cur === 0 ? 1 : 0
+
+  const pu = a.posVar.material.uniforms
+  pu.uDt.value = dt
+  pu.texturePosition.value = a.posVar.renderTargets[cur].texture
+  pu.textureVelocity.value = a.velVar.renderTargets[cur].texture
+  gpu.doRenderTarget(a.posVar.material, a.posVar.renderTargets[next])
+
+  gpu.renderTexture(a.velVar.renderTargets[cur].texture, a.velVar.renderTargets[next])
+  gpu.currentTextureIndex = next
+}
+
 export default function ParticleField() {
   const gl = useThree((s) => s.gl)
   const quality = useStore((s) => s.quality)
   const size = PARTICLE_TEX[quality]
   const assetsRef = useRef<FieldAssets | null>(null)
   const [assets, setAssets] = useState<FieldAssets | null>(null)
+  const velFrame = useRef(false)
+  const velDt = useRef(0)
 
   useEffect(() => {
     const built = buildAssets(gl, size)
@@ -149,19 +166,25 @@ export default function ParticleField() {
     const pu = a.posVar.material.uniforms
     const mu = a.material.uniforms
 
-    vu.uTime.value = simTime
-    vu.uDt.value = dt
-
-    pu.uDt.value = dt
     pu.uCenter.value.copy(cam)
 
     mu.uTime.value = state.clock.elapsedTime
     ;(mu.uCenter.value as THREE.Vector3).copy(cam)
-    // Tracks AdaptiveDpr: when the pixel ratio drops, point sizes must drop
-    // with it or every mote bloats on the upscaled buffer.
+    // When the dynamic pixel ratio drops, point sizes must drop with it or
+    // every mote bloats on the upscaled buffer.
     mu.uPixelRatio.value = state.gl.getPixelRatio()
-
-    a.gpu.compute()
+    
+    velFrame.current = !velFrame.current
+    velDt.current += dt
+    if (velFrame.current) {
+      vu.uTime.value = simTime
+      vu.uDt.value = velDt.current
+      velDt.current = 0
+      pu.uDt.value = dt
+      a.gpu.compute()
+    } else {
+      positionOnlyStep(a, dt)
+    }
     mu.uPositions.value = a.gpu.getCurrentRenderTarget(a.posVar).texture
     mu.uVelocities.value = a.gpu.getCurrentRenderTarget(a.velVar).texture
   })

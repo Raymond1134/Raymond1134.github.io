@@ -11,10 +11,11 @@ import beaconVert from '@/shaders/beacon/beacon.vert'
 import coreFrag from '@/shaders/beacon/core.frag'
 import motesVert from '@/shaders/beacon/motes.vert'
 import motesFrag from '@/shaders/beacon/motes.frag'
+import { glowTexture } from '@/scene/glowTexture'
+import { BEACON_DEFAULT_COLOR } from './palette'
 
 const TAP_TARGET_FACTOR = 0.11
 
-const DEFAULT_COLOR = '#ffd9a0'
 const NUCLEUS_COLOR = '#fff4e2'
 const MOTE_COUNT = 800
 
@@ -127,7 +128,7 @@ export default function Beacon({ node, role }: Props) {
   const phase = useStore((s) => s.phase)
   const canHoverPointer = useStore((s) => s.hover)
   const coarse = useStore((s) => s.coarse)
-  const color = useMemo(() => new THREE.Color(node.color ?? DEFAULT_COLOR), [node.color])
+  const color = useMemo(() => new THREE.Color(node.color ?? BEACON_DEFAULT_COLOR), [node.color])
 
   const outerColor = useMemo(
     () => color.clone().lerp(new THREE.Color(site.meta.themeColorHot), 0.85),
@@ -145,27 +146,11 @@ export default function Beacon({ node, role }: Props) {
 
   const clusterSeed = useMemo(() => hash01(node.id, 41) * 97.3, [node.id])
   const seed = useMemo(() => hash01(node.id, 7) * Math.PI * 2, [node.id])
-
-  /**
-   * Built in an effect, not a useMemo, so creation and disposal are paired.
-   *
-   * StrictMode dev-mounts twice — effect, cleanup, effect. With creation in a
-   * useMemo the first cleanup disposes these while the useMemo never re-runs,
-   * so the second mount is left holding disposed handles. three happens to
-   * rebuild a disposed material or geometry from the CPU-side data it still
-   * has, which is why this never showed symptoms the way ParticleField did, but
-   * the ownership was wrong all the same.
-   */
   const [assets, setAssets] = useState<BeaconAssets | null>(null)
 
   useEffect(() => {
     const built = buildAssets(node.id, color, coolColor, clusterSeed)
-    // These are GPU handles, i.e. an external resource the effect owns; the
-    // rule's usual advice (derive it during render instead) is exactly the
-    // useMemo arrangement that broke here. The only lint-clean alternative is
-    // to declare the material and geometry as JSX children so R3F owns their
-    // disposal — worth doing eventually, but a much larger change.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
+
     setAssets(built)
     return () => {
       built.coreMat.dispose()
@@ -203,9 +188,6 @@ export default function Beacon({ node, role }: Props) {
 
     mm.uniforms.uTime.value = t
     mm.uniforms.uIntensity.value = gain * MOTE_DENSITY_TRIM * (role === 'distant' ? 0.5 : 1) * (1 + h * 0.6)
-    
-    // Tracks AdaptiveDpr: when the pixel ratio drops, point sizes must drop
-    // with it or the motes bloat on the upscaled buffer.
     mm.uniforms.uPixelRatio.value = state.gl.getPixelRatio()
     motes.current.scale.setScalar(1 + h * 0.6)
 
@@ -285,6 +267,8 @@ export default function Beacon({ node, role }: Props) {
             color={color}
             anchorX="center"
             anchorY="top"
+            /* Local font: troika's default is fetched from a Google CDN. */
+            font="/fonts/Inter-SemiBold.woff"
             material-toneMapped={false}
             outlineWidth={0.06}
             /* Keeps it legible against a bright particle stream. */
@@ -319,25 +303,4 @@ export default function Beacon({ node, role }: Props) {
       </sprite>
     </group>
   )
-}
-
-let glowTex: THREE.Texture | null = null
-function glowTexture(): THREE.Texture {
-  if (glowTex) return glowTex
-  const s = 128
-  const c = document.createElement('canvas')
-  c.width = c.height = s
-  const ctx = c.getContext('2d')!
-  const g = ctx.createRadialGradient(s / 2, s / 2, 0, s / 2, s / 2, s / 2)
-  g.addColorStop(0.0, 'rgba(255,255,255,1)')
-  g.addColorStop(0.08, 'rgba(255,255,255,0.8)')
-  g.addColorStop(0.22, 'rgba(255,255,255,0.3)')
-  g.addColorStop(0.5, 'rgba(255,255,255,0.07)')
-  g.addColorStop(0.78, 'rgba(255,255,255,0.015)')
-  g.addColorStop(1.0, 'rgba(255,255,255,0)')
-  ctx.fillStyle = g
-  ctx.fillRect(0, 0, s, s)
-  glowTex = new THREE.CanvasTexture(c)
-  glowTex.colorSpace = THREE.SRGBColorSpace
-  return glowTex
 }

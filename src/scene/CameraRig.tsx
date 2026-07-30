@@ -4,7 +4,7 @@ import * as THREE from 'three'
 import { useStore, getCurrentNode, TRAVEL } from '@/state/store'
 import type { GraphNode } from '@/content/layout'
 import { input, attachInput, settleInput, setLookScale } from '@/input/input'
-import { panelSizeFor } from '@/scene/ui3d/panelLayout'
+import { panelSizeFor, PANEL_Z, PANEL_LIFT } from '@/scene/ui3d/panelLayout'
 
 const tmpA = new THREE.Vector3()
 const tmpB = new THREE.Vector3()
@@ -90,7 +90,7 @@ export default function CameraRig() {
 
     const current = getCurrentNode()
     const panel = panelSizeFor(s.compact, s.portrait)
-    const dist = anchorDistance(camera, panel.w, panel.h) + input.dolly
+    const dist = anchorDistance(camera, panel.w, panel.h * (1 + 2 * PANEL_LIFT)) + PANEL_Z + input.dolly
 
     if (s.phase === 'turn') {
       const target = s.pendingId ? s.graph.nodes.get(s.pendingId) : null

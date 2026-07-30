@@ -29,3 +29,6 @@ The build plan, phase by phase, lives in [`notes/plan.md`](notes/plan.md).
 3D simplex noise (`src/shaders/lib/noise3D.glsl`) from
 [webgl-noise](https://github.com/stegu/webgl-noise) by Ashima Arts /
 Stefan Gustavson (MIT).
+
+[Inter](https://rsms.me/inter/) typeface (`public/fonts/`) by Rasmus
+Andersson (SIL OFL 1.1), via [Fontsource](https://fontsource.org/).

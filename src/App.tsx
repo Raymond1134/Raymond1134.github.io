@@ -1,25 +1,28 @@
 import { Canvas } from '@react-three/fiber'
-import { AdaptiveDpr, Preload } from '@react-three/drei'
+import { PerformanceMonitor, Preload } from '@react-three/drei'
 import * as THREE from 'three'
-import { Suspense } from 'react'
+import { Suspense, useState } from 'react'
 import Scene from '@/scene/Scene'
 import Hud from '@/ui/Hud'
 import TextMode from '@/ui/TextMode'
 import FirstHint from '@/ui/FirstHint'
+import BeaconSheet from '@/ui/BeaconSheet'
 import { useStore } from '@/state/store'
 import { useViewport } from '@/ui/useViewport'
 import { isCoarsePointer } from '@/device'
 
 const coarse = isCoarsePointer()
+const DPR_MAX = coarse ? 1.5 : 2
 
 export default function App() {
   useViewport()
   const textMode = useStore((s) => s.textMode)
+  const [dpr, setDpr] = useState(DPR_MAX)
 
   return (
     <>
       <Canvas
-        dpr={coarse ? [1, 1.5] : [1, 2]}
+        dpr={dpr}
         gl={{
           antialias: false,
           alpha: false,
@@ -39,10 +42,14 @@ export default function App() {
           <Scene />
           <Preload all />
         </Suspense>
-        <AdaptiveDpr pixelated />
+        <PerformanceMonitor
+          onDecline={() => setDpr((d) => Math.max(1, d - 0.25))}
+          onIncline={() => setDpr((d) => Math.min(DPR_MAX, d + 0.25))}
+        />
       </Canvas>
 
       <Hud />
+      {!textMode && <BeaconSheet />}
       {!textMode && <FirstHint />}
       {textMode && <TextMode />}
     </>

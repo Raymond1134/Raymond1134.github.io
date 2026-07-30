@@ -1,0 +1,71 @@
+/* The CSS3D layer never intercepts drags meant for the canvas; links opt back
+   in only once the panel has condensed (.is-live, toggled from the fade). */
+.holo-html { pointer-events: none; }
+
+.holo-body {
+  font-family: 'Inter', system-ui, sans-serif;
+  color: #d7e4f7;
+  /* <Html> gets zero post-processing, so the glow is faked here — tinted by
+     the beacon's own light rather than a fixed HUD cyan. */
+  text-shadow:
+    0 0 10px color-mix(in srgb, var(--holo-accent, #ffd9a0) 40%, transparent),
+    0 0 26px color-mix(in srgb, var(--holo-accent, #ffd9a0) 18%, transparent);
+  line-height: 1.6;
+  font-size: 15px;
+}
+
+.holo-copy p { margin: 0 0 0.85em; }
+.holo-copy code {
+  font-family: ui-monospace, 'JetBrains Mono', monospace;
+  background: color-mix(in srgb, var(--holo-accent, #ffd9a0) 12%, transparent);
+  padding: 0.1em 0.35em;
+  border-radius: 6px;
+}
+.holo-copy a { color: #eef6ff; }
+
+.holo-links { list-style: none; margin: 1.2em 0 0; padding: 0; display: flex; flex-wrap: wrap; gap: 10px; }
+.holo-links a {
+  pointer-events: none;
+  display: inline-flex; align-items: center; gap: 8px;
+  min-height: var(--tap);        /* applies on touch-capable laptops/tablets too */
+  padding: 7px 18px;
+  border: 1px solid color-mix(in srgb, var(--holo-accent, #ffd9a0) 45%, transparent);
+  border-radius: 999px;
+  color: #eef6ff; text-decoration: none; font-size: 13.5px; letter-spacing: 0.02em;
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--holo-accent, #ffd9a0) 16%, transparent),
+    color-mix(in srgb, var(--holo-accent, #ffd9a0) 5%, transparent)
+  );
+  box-shadow: 0 0 16px color-mix(in srgb, var(--holo-accent, #ffd9a0) 14%, transparent);
+  transition: box-shadow 220ms ease, background 220ms ease, transform 220ms ease;
+}
+.holo-body.is-live .holo-links a { pointer-events: auto; }
+
+/* Gate hover so it doesn't stick after a tap on touch devices. */
+@media (hover: hover) {
+  .holo-links a:hover {
+    background: color-mix(in srgb, var(--holo-accent, #ffd9a0) 22%, transparent);
+    box-shadow:
+      0 0 26px color-mix(in srgb, var(--holo-accent, #ffd9a0) 40%, transparent),
+      inset 0 0 14px color-mix(in srgb, var(--holo-accent, #ffd9a0) 18%, transparent);
+    transform: translateY(-1px);
+  }
+}
+.holo-links a:focus-visible {
+  background: color-mix(in srgb, var(--holo-accent, #ffd9a0) 22%, transparent);
+  box-shadow: 0 0 26px color-mix(in srgb, var(--holo-accent, #ffd9a0) 40%, transparent);
+}
+.holo-links a:active { background: color-mix(in srgb, var(--holo-accent, #ffd9a0) 30%, transparent); }
+.holo-links .glyph { opacity: 0.85; }
+
+.holo-tags { list-style: none; display: flex; flex-wrap: wrap; gap: 4px 14px; margin: 1.1em 0 0; padding: 0; }
+.holo-tags li {
+  font-size: 12px; letter-spacing: 0.08em;
+  color: color-mix(in srgb, var(--holo-accent, #ffd9a0) 55%, #9db8dc);
+}
+.holo-tags li::before { content: '✦'; margin-right: 7px; opacity: 0.55; font-size: 10px; }
+
+@media (prefers-reduced-motion: reduce) {
+  .holo-links a { transition: none; }
+}
