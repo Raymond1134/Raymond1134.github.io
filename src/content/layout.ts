@@ -9,7 +9,7 @@ export interface GraphNode extends Beacon {
   /* Unit vector pointing away from the parent. */
   outward: THREE.Vector3
 }
-  
+
 export interface Graph {
   nodes: Map<string, GraphNode>
   order: string[]
@@ -23,110 +23,85 @@ export function hash01(str: string, salt = 0): number {
   }
   return ((h >>> 0) % 1_000_003) / 1_000_003
 }
-  
-const GOLDEN_ANGLE = Math.PI * (3 - Math.sqrt(5))
-  
-/* Distance from a beacon to its children. */
-function ringRadius(depth: number): number {
-  return 50 * Math.pow(0.86, depth)
-}
-  
-/* Half-angle of the cone that children are scattered into, in radians. */
-function coneSpread(depth: number, childCount: number): number {
-  if (depth === 0) return Math.PI * 0.45
-  return Math.min(Math.PI * 0.42, 0.5 + childCount * 0.16)
-}
 
-/* The cone is only a bias. */
-const MAX_POLAR = Math.PI * 0.33
-  
+const RING_X = 115
+const RING_Y = 62
+const RING_DROP = 95
+const DEPTH_JITTER = 18
+
 export function buildGraph(site: Site): Graph {
   const byId = new Map(site.beacons.map((b) => [b.id, b]))
-  const nodes = new Map<string, GraphNode>()
-  const order: string[] = []
   const root = byId.get(site.root)
   if (!root) throw new Error(`site.root "${site.root}" is not a beacon id`)
-  
-  const walk = (
-    beacon: Beacon,
-    parentId: string | null,
-    depth: number,
-    origin: THREE.Vector3,
-    inheritedOutward: THREE.Vector3,
-    indexInSiblings: number,
-    siblingCount: number) => {
-      if (nodes.has(beacon.id)) return
-      let pos: THREE.Vector3
-      let outward: THREE.Vector3
-  
-      if (beacon.position) {
-        pos = new THREE.Vector3(...beacon.position)
-        outward = pos.clone().sub(origin).normalize()
-        if (outward.lengthSq() < 1e-6) outward = new THREE.Vector3(0, 0, -1)
-      }
-      else if (parentId === null) {
-        pos = new THREE.Vector3(0, 0, 0)
-        outward = new THREE.Vector3(0, 0, -1)
-      }
-      else {
-        const spread = coneSpread(depth - 1, siblingCount)
-        const t = siblingCount === 1 ? 0 : indexInSiblings / (siblingCount - 1)
-        const polar = Math.min(
-          MAX_POLAR,
-          spread * (0.35 + 0.65 * t) * (0.7 + 0.6 * hash01(beacon.id, 1)),
-        )
-        const azimuth = indexInSiblings * GOLDEN_ANGLE + hash01(beacon.id, 2) * Math.PI * 2
-        const axis = inheritedOutward.clone().normalize()
-        const helper = Math.abs(axis.y) > 0.95 ? new THREE.Vector3(1, 0, 0) : new THREE.Vector3(0, 1, 0)
-        const right = new THREE.Vector3().crossVectors(axis, helper).normalize()
-        const up = new THREE.Vector3().crossVectors(right, axis).normalize()
-  
-        const dir = axis
-          .clone()
-          .multiplyScalar(Math.cos(polar))
-          .addScaledVector(right, Math.sin(polar) * Math.cos(azimuth))
-          .addScaledVector(up, Math.sin(polar) * Math.sin(azimuth))
-          .normalize()
-  
-        const r = ringRadius(depth - 1) * beacon.spread * (0.85 + 0.3 * hash01(beacon.id, 3))
-        pos = origin.clone().addScaledVector(dir, r)
-        outward = dir
-      }
-  
-      nodes.set(beacon.id, {
-        ...beacon,
-        depth,
-        parentId,
-        worldPosition: pos,
-        outward,
-      })
 
-      order.push(beacon.id)
-      const kids = beacon.children.map((id) => byId.get(id)).filter(Boolean) as Beacon[]
-      kids.forEach((kid, i) => walk(kid, beacon.id, depth + 1, pos, outward, i, kids.length))
-    }
-  
-    walk(root, null, 0, new THREE.Vector3(), new THREE.Vector3(0, 0, -1), 0, 1)
-    
-    /* Handle orphaned beacons. */
-    site.beacons.forEach((b, i) => {
-      if (nodes.has(b.id)) return
-      const a = i * GOLDEN_ANGLE
-      const y = 1 - (i / Math.max(1, site.beacons.length)) * 2
-      const r = Math.sqrt(Math.max(0, 1 - y * y))
-      nodes.set(b.id, {
-        ...b,
-        depth: 1,
-        parentId: site.root,
-        worldPosition: new THREE.Vector3(Math.cos(a) * r, y, Math.sin(a) * r).multiplyScalar(200),
-        outward: new THREE.Vector3(Math.cos(a) * r, y, Math.sin(a) * r).normalize(),
-      })
-      order.push(b.id)
-    })
-  
-    return { nodes, order, rootId: site.root }
+  /* Claim children breadth-first. */
+  const kids = new Map<string, Beacon[]>()
+  const seen = new Set([root.id])
+  const claim = (b: Beacon) => {
+    const cs = b.children
+      .map((id) => byId.get(id))
+      .filter((c): c is Beacon => !!c && !seen.has(c.id))
+    cs.forEach((c) => seen.add(c.id))
+    kids.set(b.id, cs)
+    return cs
   }
-  
+  const queue = [root]
+  while (queue.length) queue.push(...claim(queue.shift()!))
+
+  const strays = site.beacons.filter((b) => !seen.has(b.id))
+  if (strays.length) {
+    strays.forEach((s) => seen.add(s.id))
+    kids.get(root.id)!.push(...strays)
+    const q = [...strays]
+    while (q.length) q.push(...claim(q.shift()!))
+  }
+
+  const leaves = new Map<string, number>()
+  const measure = (b: Beacon): number => {
+    const cs = kids.get(b.id) ?? []
+    const n = cs.length ? cs.reduce((sum, c) => sum + measure(c), 0) : 1
+    leaves.set(b.id, n)
+    return n
+  }
+  measure(root)
+
+  const nodes = new Map<string, GraphNode>()
+  const order: string[] = []
+
+  const place = (b: Beacon, parent: GraphNode | null, depth: number, a0: number, a1: number) => {
+    const mid = (a0 + a1) / 2 + (hash01(b.id, 2) - 0.5) * (a1 - a0) * 0.22
+    const r = depth * b.spread * (0.92 + 0.16 * hash01(b.id, 3))
+    const pos = b.position
+      ? new THREE.Vector3(...b.position)
+      : new THREE.Vector3(
+          Math.cos(mid) * RING_X * r,
+          -Math.sin(mid) * RING_Y * r,
+          -RING_DROP * r + (depth ? (hash01(b.id, 5) - 0.5) * 2 * DEPTH_JITTER : 0),
+        )
+
+    let outward = parent
+      ? pos.clone().sub(parent.worldPosition).normalize()
+      : new THREE.Vector3(0, 0, -1)
+    if (outward.lengthSq() < 1e-6) outward = new THREE.Vector3(0, 0, -1)
+
+    const node: GraphNode = { ...b, depth, parentId: parent?.id ?? null, worldPosition: pos, outward }
+    nodes.set(b.id, node)
+    order.push(b.id)
+
+    const cs = kids.get(b.id) ?? []
+    const total = cs.reduce((sum, c) => sum + (leaves.get(c.id) ?? 1), 0) || 1
+    let a = a0
+    for (const c of cs) {
+      const span = ((leaves.get(c.id) ?? 1) / total) * (a1 - a0)
+      place(c, node, depth + 1, a, a + span)
+      a += span
+    }
+  }
+  place(root, null, 0, -Math.PI / 2, Math.PI * 1.5)
+
+  return { nodes, order, rootId: site.root }
+}
+
 /* Beacons reachable in one hop: children + parent + siblings. */
 export function neighborsOf(graph: Graph, id: string): string[] {
   const node = graph.nodes.get(id)

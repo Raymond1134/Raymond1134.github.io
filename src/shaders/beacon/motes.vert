@@ -3,6 +3,7 @@ uniform float uPixelRatio;
 uniform float uOrbitRadius;
 uniform float uClusters;
 uniform float uClusterSeed;   // per-beacon, so no two beacons share a wisp layout
+uniform float uScale;         // beacon's world scale; sprites don't inherit it
 
 attribute vec3  aSeed;      // three per-mote constants, 0..1
 attribute float aCluster;   // which wisp this mote belongs to
@@ -89,9 +90,9 @@ void main() {
   // mid-sized and the wisp flattens.
   float sz = fract(s1 * 5.77 + s2 * 2.13);
   gl_PointSize = clamp(
-    uPixelRatio * (0.8 + sz * sz * 4.0) * (1.0 - u * 0.45) * (68.0 / dist),
+    uPixelRatio * (0.8 + sz * sz * 4.0) * (1.0 - u * 0.45) * (68.0 * uScale / dist),
     0.6,
-    12.0 * uPixelRatio
+    12.0 * uPixelRatio * uScale
   );
 
   // Own clock per mote, so a wisp shimmers rather than blinking as one body.

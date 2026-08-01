@@ -8,7 +8,7 @@
   flex-wrap: wrap;
   justify-content: flex-end;
   gap: 8px;
-  max-width: min(90vw, 420px);
+  max-width: min(90vw, 460px);
 
   transition: opacity 320ms ease;
 }
@@ -20,58 +20,113 @@
   pointer-events: none;
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .hud {
-    transition: none;
-  }
-}
-
-.hud button {
+.hud-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
   min-height: var(--tap);
-  padding: 0 14px;
-  background: rgba(3, 6, 16, 0.55);
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
-  border: 1px solid rgba(123, 220, 255, 0.28);
-  border-radius: 3px;
+  padding: 0 16px;
+
+  border: 1px solid rgba(207, 224, 247, 0.2);
+  border-radius: 999px;
+  background: rgba(9, 14, 28, 0.5);
+  backdrop-filter: blur(12px) saturate(1.2);
+  -webkit-backdrop-filter: blur(12px) saturate(1.2);
 
   color: var(--ink);
   font: inherit;
-  font-size: 12px;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
+  font-size: 12.5px;
+  letter-spacing: 0.02em;
   cursor: pointer;
   touch-action: manipulation;
+  transition: background 220ms ease, border-color 220ms ease, box-shadow 220ms ease,
+    opacity 220ms ease;
 }
 
-.hud button[disabled] {
-  opacity: 0.35;
+.hud-chip .glyph {
+  font-size: 16px;
+  line-height: 1;
+  opacity: 0.78;
+}
+
+.hud-chip[disabled] {
+  opacity: 0.3;
   cursor: default;
 }
 
-.hud button:active {
-  background: rgba(123, 220, 255, 0.18);
+/* Pressed toggles take the light of whatever beacon you are standing at. */
+.hud-chip[data-on] {
+  border-color: color-mix(in srgb, var(--hud-accent) 55%, transparent);
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--hud-accent) 18%, rgba(9, 14, 28, 0.5)),
+    color-mix(in srgb, var(--hud-accent) 6%, rgba(9, 14, 28, 0.5))
+  );
+  box-shadow: 0 0 20px color-mix(in srgb, var(--hud-accent) 16%, transparent);
+}
+.hud-chip[data-on] .glyph { opacity: 1; }
+
+.hud-chip:active:not([disabled]) {
+  background: color-mix(in srgb, var(--hud-accent) 24%, rgba(9, 14, 28, 0.5));
 }
 
 @media (hover: hover) {
-  .hud button:hover:not([disabled]) {
-    background: rgba(123, 220, 255, 0.14);
-    border-color: rgba(123, 220, 255, 0.5);
+  .hud-chip:hover:not([disabled]) {
+    border-color: color-mix(in srgb, var(--hud-accent) 45%, transparent);
+    background: color-mix(in srgb, var(--hud-accent) 14%, rgba(9, 14, 28, 0.5));
+    box-shadow: 0 0 22px color-mix(in srgb, var(--hud-accent) 14%, transparent);
   }
 }
 
-/* Compact: move to a bottom bar in the thumb zone. */
-@media (pointer: coarse) and (max-width: 600px) {
+/* Compact: a bottom bar in the thumb zone. */
+@media (pointer: coarse) and (max-width: 600px), (pointer: coarse) and (max-height: 600px) {
   .hud {
     top: auto;
     left: 0;
     right: 0;
     bottom: 0;
     max-width: none;
-    justify-content: center;
-    gap: 6px;
-    padding: 8px max(8px, var(--sal)) calc(var(--sab) + 8px) max(8px, var(--sar));
-    background: linear-gradient(to top, rgba(3, 5, 14, 0.95), rgba(3, 5, 14, 0.7));
-    border-top: 1px solid rgba(123, 220, 255, 0.18);
+    flex-wrap: nowrap;
+    justify-content: space-around;
+    gap: 4px;
+    padding: 6px max(6px, var(--sal)) calc(var(--sab) + 6px) max(6px, var(--sar));
+    background: linear-gradient(to top, rgba(3, 5, 14, 0.94) 55%, rgba(3, 5, 14, 0));
   }
+
+  .hud-chip {
+    flex: 1 1 0;
+    flex-direction: column;
+    gap: 3px;
+    min-width: 0;
+    min-height: 52px;
+    padding: 7px 4px;
+    border-color: transparent;
+    border-radius: 16px;
+    background: none;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+  .hud-chip .glyph { font-size: 18px; }
+  .hud-chip .label { font-size: 11px; }
+  .hud-chip[data-on] { box-shadow: none; }
+}
+
+@media (pointer: coarse) and (orientation: landscape) and (max-height: 480px) {
+  .hud {
+    top: 0;
+    bottom: 0;
+    left: 0;
+    right: auto;
+    flex-direction: column;
+    justify-content: center;
+    gap: 2px;
+    padding: 6px max(6px, var(--sal));
+    background: linear-gradient(to right, rgba(3, 5, 14, 0.92) 40%, rgba(3, 5, 14, 0));
+  }
+  .hud-chip { flex: 0 0 auto; min-width: 58px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hud,
+  .hud-chip { transition: none; }
 }

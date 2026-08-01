@@ -27,7 +27,7 @@ export const BeaconSchema = z.object({
   color: z.string().regex(/^#[0-9a-fA-F]{6}$/).optional(),
   position: z.tuple([z.number(), z.number(), z.number()]).optional(),
 
-  /* Multiplies the auto-layout distance from parent. */
+  /* Multiplies the auto-layout radial distance from the graph centre. */
   spread: z.number().default(1),
 
   hidden: z.boolean().default(false),

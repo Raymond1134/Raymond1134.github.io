@@ -128,6 +128,68 @@ export function recentre() {
   input.dolly = 0
 }
 
+/* Tilt-to-peek. Opt-in: it costs a permission prompt on iOS */
+const DEG = Math.PI / 180
+const GYRO_GAIN = 0.75
+const GYRO_MAX = 0.55
+
+let detachGyro: (() => void) | null = null
+
+export const gyroAvailable = () => typeof DeviceOrientationEvent !== 'undefined'
+
+/* Call straight from a click handler */
+export function enableGyro(): Promise<boolean> {
+  const ctor = DeviceOrientationEvent as unknown as { requestPermission?: () => Promise<string> }
+  const ask = ctor?.requestPermission?.() ?? Promise.resolve('granted')
+  return ask
+    .then((state) => {
+      if (state !== 'granted') return false
+      attachGyro()
+      return true
+    })
+    .catch(() => false)
+}
+
+export function disableGyro() {
+  detachGyro?.()
+  detachGyro = null
+  input.gyro = null
+}
+
+function attachGyro() {
+  if (detachGyro) return
+
+  let base: { roll: number; tip: number } | null = null
+  const smoothed = { x: 0, y: 0 }
+
+  const onOrient = (e: DeviceOrientationEvent) => {
+    if (e.beta === null || e.gamma === null) return
+    const a = (screen.orientation?.angle ?? 0) * DEG
+    const c = Math.cos(a)
+    const s = Math.sin(a)
+    const roll = e.gamma * c - e.beta * s
+    const tip = e.beta * c + e.gamma * s
+    if (!base) base = { roll, tip }
+
+    const yaw = clamp(-(roll - base.roll) * DEG * GYRO_GAIN, -GYRO_MAX, GYRO_MAX)
+    const pitch = clamp((tip - base.tip) * DEG * GYRO_GAIN, -GYRO_MAX, GYRO_MAX)
+
+    /* Raw orientation is jittery. */
+    smoothed.x += (yaw - smoothed.x) * 0.12
+    smoothed.y += (pitch - smoothed.y) * 0.12
+    input.gyro = smoothed
+  }
+
+  const onReset = () => { base = null }
+
+  addEventListener('deviceorientation', onOrient)
+  addEventListener('orientationchange', onReset)
+  detachGyro = () => {
+    removeEventListener('deviceorientation', onOrient)
+    removeEventListener('orientationchange', onReset)
+  }
+}
+
 /* Seconds of stillness before the dolly eases home / the view starts drifting. */
 const DOLLY_SETTLE_AFTER = 2.5
 const DRIFT_AFTER = 7

@@ -16,6 +16,9 @@ import { BEACON_DEFAULT_COLOR } from './palette'
 
 const TAP_TARGET_FACTOR = 0.11
 
+/* Lights are this many times their size out in the world; the one you are visiting eases back down */
+const BEACON_SCALE = 2.5
+
 const NUCLEUS_COLOR = '#fff4e2'
 const MOTE_COUNT = 800
 
@@ -106,6 +109,7 @@ function buildAssets(
         uOrbitRadius: { value: ORBIT_RADIUS },
         uClusters: { value: CLUSTERS },
         uClusterSeed: { value: clusterSeed },
+        uScale: { value: 1 },
       },
       ...shared,
     }),
@@ -114,6 +118,9 @@ function buildAssets(
 }
 
 export default function Beacon({ node, role }: Props) {
+  const group = useRef<THREE.Group>(null!)
+  const scaleT = useRef(role === 'current' ? 1 : BEACON_SCALE)
+  const prevRole = useRef(role)
   const core = useRef<THREE.Mesh>(null!)
   const motes = useRef<THREE.Points>(null!)
   const glowInner = useRef<THREE.Sprite>(null!)
@@ -172,6 +179,14 @@ export default function Beacon({ node, role }: Props) {
     hoverT.current += ((hovered ? 1 : 0) - hoverT.current) * (1 - Math.pow(0.01, dt))
     const h = hoverT.current
 
+    if (prevRole.current !== role) {
+      if (phase === 'idle') scaleT.current = role === 'current' ? 1 : BEACON_SCALE
+      prevRole.current = role
+    }
+    const sc = (scaleT.current +=
+      ((role === 'current' ? 1 : BEACON_SCALE) - scaleT.current) * (1 - Math.pow(0.02, dt)))
+    group.current.scale.setScalar(sc)
+
     const flicker =
       0.84 +
       0.10 * Math.sin(t * 1.13 + seed) +
@@ -189,6 +204,7 @@ export default function Beacon({ node, role }: Props) {
     mm.uniforms.uTime.value = t
     mm.uniforms.uIntensity.value = gain * MOTE_DENSITY_TRIM * (role === 'distant' ? 0.5 : 1) * (1 + h * 0.6)
     mm.uniforms.uPixelRatio.value = state.gl.getPixelRatio()
+    mm.uniforms.uScale.value = sc
     motes.current.scale.setScalar(1 + h * 0.6)
 
     const d = state.camera.position.distanceTo(node.worldPosition)
@@ -199,10 +215,11 @@ export default function Beacon({ node, role }: Props) {
       HALO_GAIN[role] * flicker * (1 + h * 1.5)
     ;(glowOuter.current.material as THREE.SpriteMaterial).opacity =
       HALO_GAIN[role] * 0.2 * flicker * (1 + h * 1.5)
-    hit.current.scale.setScalar(THREE.MathUtils.clamp(d * TAP_TARGET_FACTOR, 6, 46))
+      
+    hit.current.scale.setScalar(THREE.MathUtils.clamp(d * TAP_TARGET_FACTOR, 6, 46) / sc)
 
     if (label.current) {
-      label.current.scale.setScalar(Math.max(1.1, d * 0.028))
+      label.current.scale.setScalar(Math.max(1.1, d * 0.028) / sc)
 
       const o = phase === 'idle' ? (coarse ? 1 : h) : 0
       label.current.visible = o > 0.01
@@ -215,7 +232,7 @@ export default function Beacon({ node, role }: Props) {
   })
 
   return (
-    <group position={node.worldPosition}>
+    <group ref={group} position={node.worldPosition}>
       <mesh
         ref={hit}
         visible={false}

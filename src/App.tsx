@@ -7,7 +7,9 @@ import Hud from '@/ui/Hud'
 import TextMode from '@/ui/TextMode'
 import FirstHint from '@/ui/FirstHint'
 import BeaconSheet from '@/ui/BeaconSheet'
+import Weave from '@/ui/Weave'
 import { useStore } from '@/state/store'
+import { useHashRouting } from '@/state/routing'
 import { useViewport } from '@/ui/useViewport'
 import { isCoarsePointer } from '@/device'
 
@@ -16,6 +18,7 @@ const DPR_MAX = coarse ? 1.5 : 2
 
 export default function App() {
   useViewport()
+  useHashRouting()
   const textMode = useStore((s) => s.textMode)
   const [dpr, setDpr] = useState(DPR_MAX)
 
@@ -49,6 +52,7 @@ export default function App() {
       </Canvas>
 
       <Hud />
+      {!textMode && <Weave />}
       {!textMode && <BeaconSheet />}
       {!textMode && <FirstHint />}
       {textMode && <TextMode />}
