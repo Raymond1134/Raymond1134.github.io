@@ -21,4 +21,6 @@ void main() {
   vec3 col = mix(vColor, uColorCool, vTrail * 0.4);
 
   gl_FragColor = vec4(col, a * vGain * uIntensity * (1.0 - vTrail * 0.72));
+
+  #include <colorspace_fragment>
 }

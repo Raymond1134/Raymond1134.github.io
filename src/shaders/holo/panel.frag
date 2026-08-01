@@ -22,8 +22,9 @@ void main() {
   float edgeFade = smoothstep(0.0, 1.5, min(m.x, m.y));
 
   // Light wells up from the beacon: strongest low, quietest at the top, so
-  // the thread never fights the title for attention.
-  float well = 0.28 + 0.8 * smoothstep(-uSize.y * 0.5, uSize.y * 0.5, -p.y);
+  // the thread never fights the title for attention. Capped below 1 — past
+  // that the rim clips to white and reads as signage, not apparition.
+  float well = 0.18 + 0.55 * smoothstep(-uSize.y * 0.5, uSize.y * 0.5, -p.y);
 
   float rim = 0.0;
   float core = 0.0;
@@ -47,7 +48,9 @@ void main() {
   float alpha = (veil + rim * 0.48) * edgeFade * breathe * uOpacity;
   // The filament leans toward white so it reads as light — but stays the
   // beacon's colour everywhere else.
-  vec3 col = uColor * (0.6 + rim * 2.0 + veil * 3.0) + vec3(core * core * 0.3 * well);
+  vec3 col = uColor * (0.6 + rim * 1.5 + veil * 3.0) + vec3(core * core * 0.2 * well);
 
   gl_FragColor = vec4(col, alpha);
+
+  #include <colorspace_fragment>
 }

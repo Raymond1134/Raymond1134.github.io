@@ -11,7 +11,7 @@ import { isCoarsePointer, canHover } from '@/device'
 export type Phase = 'idle' | 'turn' | 'flight' | 'settle'
 export type Quality = 'low' | 'medium' | 'high' | 'ultra'
 
-export const PARTICLE_TEX = { low: 512, medium: 720, high: 1024, ultra: 1280 } as const
+export const PARTICLE_TEX = { low: 384, medium: 480, high: 512, ultra: 720 } as const
 
 /* Timeline, in seconds, of the travel sequence. */
 export const TRAVEL = { turn: 0.7, flight: 1.0, settle: 0.5 } as const
@@ -61,12 +61,12 @@ export const useStore = create<State>((set, get) => ({
   pendingId: null,
   phase: 'idle',
   travelClock: 0,
-  /**
-   * Until the Phase-10 governor exists, the initial tier is a guess from the
-   * pointer: 780² particles is fine on a desktop GPU and a space heater on a
-   * phone. Coarse pointers start one tier down.
-   */
-  quality: isCoarsePointer() ? 'medium' : 'high',
+  quality:
+    isCoarsePointer() && typeof innerWidth !== 'undefined' && Math.min(innerWidth, innerHeight) < 600
+      ? 'low'
+      : isCoarsePointer()
+        ? 'medium'
+        : 'high',
   reducedMotion: typeof matchMedia !== 'undefined' && matchMedia('(prefers-reduced-motion: reduce)').matches,
   audioEnabled: false,
   mapOpen: false,

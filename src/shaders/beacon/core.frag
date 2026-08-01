@@ -37,4 +37,6 @@ void main() {
   float a = (body * 0.22 + nucleus * 1.25) * uIntensity;
 
   gl_FragColor = vec4(col, a);
+
+  #include <colorspace_fragment>
 }

@@ -33,6 +33,7 @@ const WORLD_UP = new THREE.Vector3(0, 1, 0)
 
 interface TroikaText {
   fillOpacity: number
+  outlineOpacity: number
 }
 
 export default function HoloPanel() {
@@ -121,8 +122,16 @@ export default function HoloPanel() {
       ;(mat.uniforms.uSize.value as THREE.Vector2).set(PANEL_W, PANEL_H)
     }
 
-    if (titleRef.current) (titleRef.current as unknown as TroikaText).fillOpacity = fade
-    if (subRef.current) (subRef.current as unknown as TroikaText).fillOpacity = fade * 0.85
+    if (titleRef.current) {
+      const t = titleRef.current as unknown as TroikaText
+      t.fillOpacity = fade
+      t.outlineOpacity = fade
+    }
+    if (subRef.current) {
+      const t = subRef.current as unknown as TroikaText
+      t.fillOpacity = fade * 0.85
+      t.outlineOpacity = fade * 0.85
+    }
 
     const el = htmlRef.current
     if (el) {
@@ -160,6 +169,9 @@ export default function HoloPanel() {
           color={accent}
           material-toneMapped={false}
           fillOpacity={0}
+          outlineWidth="6%"
+          outlineColor="#03040a"
+          outlineOpacity={0}
           font="/fonts/Inter-SemiBold.woff"
         >
           {node.title}
@@ -176,6 +188,9 @@ export default function HoloPanel() {
             color="#9fb6d8"
             material-toneMapped={false}
             fillOpacity={0}
+            outlineWidth="6%"
+            outlineColor="#03040a"
+            outlineOpacity={0}
             font="/fonts/Inter-Regular.woff"
           >
             {node.subtitle}

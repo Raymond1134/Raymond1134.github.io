@@ -7,25 +7,26 @@ import positionShader from '@/shaders/sim/position.frag'
 import particleVert from '@/shaders/render/particle.vert'
 import particleFrag from '@/shaders/render/particle.frag'
 import { site } from '@/content'
-import { isCoarsePointer } from '@/device'
 import { PARTICLE_ORDER } from './renderOrder'
-import { useStore, PARTICLE_TEX } from '@/state/store'
+import { breath } from './breath'
+import { NO_COMPOSER } from './composerPolicy'
+import { BEACON_DEFAULT_COLOR } from './beacons/palette'
+import { useStore, PARTICLE_TEX, TRAVEL, TRAVEL_TOTAL } from '@/state/store'
+import type { Quality } from '@/state/store'
 
 /* Half-size of the cube the field wraps in, centred on the viewer. */
 const BOX_HALF = 60
 
 const FADE_START = 40
 const FADE_END = 66
-const BASE_OPACITY = 0.96
-
-/* Motion slowdown. 1 is the original speed; 1.35 is ~26% slower. */
+const BASE_OPACITY = 0.8
 const TAU = 1.35
-
-/* Pre-slowdown values. */
 const BASE = { curlAmp: 22.0, damping: 0.93, speedScale: 22.0 } as const
-
 const MAX_SPEED = 42.0
-const COLOR_WARMTH = 0.9
+const COLOR_WARMTH = 1.3
+const CONDENSE = 20.0
+const SIZE_TIER: Record<Quality, number> = { low: 1.35, medium: 1.3, high: 1.2, ultra: 1.0 }
+const LIGHT_RADIUS = 30
 
 const forceScale = 1 / (TAU * TAU)
 const damping = Math.pow(BASE.damping, 1 / TAU)
@@ -37,12 +38,16 @@ interface FieldAssets {
   posVar: Variable
   geometry: THREE.BufferGeometry
   material: THREE.ShaderMaterial
+  posIdx: number
+  velIdx: number
 }
 
 function buildAssets(gl: THREE.WebGLRenderer, size: number): FieldAssets {
   const gpu = new GPUComputationRenderer(size, size, gl)
+
+  // Half float only as a last resort
   const canRenderFloat = gl.getContext().getExtension('EXT_color_buffer_float') !== null
-  if (!canRenderFloat || isCoarsePointer()) gpu.setDataType(THREE.HalfFloatType)
+  if (!canRenderFloat) gpu.setDataType(THREE.HalfFloatType)
 
   const pos0 = gpu.createTexture()
   const vel0 = gpu.createTexture()
@@ -61,6 +66,10 @@ function buildAssets(gl: THREE.WebGLRenderer, size: number): FieldAssets {
     uCurlAmp: { value: BASE.curlAmp * forceScale },
     uDamping: { value: damping },
     uMaxSpeed: { value: MAX_SPEED },
+    uCondense: { value: CONDENSE * forceScale },
+    uTravelDir: { value: new THREE.Vector3() },
+    uTravelBoost: { value: 0 },
+    uBreath: { value: 0.5 },
   })
 
   Object.assign(posVar.material.uniforms, {
@@ -84,6 +93,12 @@ function buildAssets(gl: THREE.WebGLRenderer, size: number): FieldAssets {
   geometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(count * 3), 3))
   geometry.boundingSphere = new THREE.Sphere(new THREE.Vector3(), 1e4)
 
+  const nodes = [...useStore.getState().graph.nodes.values()]
+  const lightPos = nodes.map(
+    (n) => new THREE.Vector4(n.worldPosition.x, n.worldPosition.y, n.worldPosition.z, LIGHT_RADIUS),
+  )
+  const lightCol = nodes.map((n) => new THREE.Color(n.color ?? BEACON_DEFAULT_COLOR))
+
   const material = new THREE.ShaderMaterial({
     vertexShader: particleVert,
     fragmentShader: particleFrag,
@@ -98,7 +113,11 @@ function buildAssets(gl: THREE.WebGLRenderer, size: number): FieldAssets {
       uFadeEnd: { value: FADE_END },
       uOpacity: { value: BASE_OPACITY },
       uSpeedScale: { value: (BASE.speedScale / TAU) * COLOR_WARMTH },
-      uFogDensity: { value: 0.005 },
+      uFogDensity: { value: 0.01 },
+      uDeepColor: { value: new THREE.Color('#10142e') },
+      uSoftClip: { value: NO_COMPOSER ? 1 : 0 },
+      uLights: { value: lightPos },
+      uLightCols: { value: lightCol },
       uColorCold: { value: new THREE.Color(site.meta.themeColorCold) },
       uColorMid: { value: new THREE.Color(site.meta.themeColorMid) },
       uColorHot: { value: new THREE.Color(site.meta.themeColorHot) },
@@ -111,39 +130,43 @@ function buildAssets(gl: THREE.WebGLRenderer, size: number): FieldAssets {
     toneMapped: false,
   })
 
-  return { gpu, velVar, posVar, geometry, material }
+  return { gpu, velVar, posVar, geometry, material, posIdx: 0, velIdx: 0 }
 }
 
-function positionOnlyStep(a: FieldAssets, dt: number) {
-  const gpu = a.gpu as GPUComputationRenderer & { currentTextureIndex: number }
-  const cur = gpu.currentTextureIndex
-  const next = cur === 0 ? 1 : 0
-
+function step(a: FieldAssets, dt: number, doVel: boolean) {
+  if (doVel) {
+    const next = 1 - a.velIdx
+    const vu = a.velVar.material.uniforms
+    vu.texturePosition.value = a.posVar.renderTargets[a.posIdx].texture
+    vu.textureVelocity.value = a.velVar.renderTargets[a.velIdx].texture
+    a.gpu.doRenderTarget(a.velVar.material, a.velVar.renderTargets[next])
+    a.velIdx = next
+  }
+  const next = 1 - a.posIdx
   const pu = a.posVar.material.uniforms
   pu.uDt.value = dt
-  pu.texturePosition.value = a.posVar.renderTargets[cur].texture
-  pu.textureVelocity.value = a.velVar.renderTargets[cur].texture
-  gpu.doRenderTarget(a.posVar.material, a.posVar.renderTargets[next])
-
-  gpu.renderTexture(a.velVar.renderTargets[cur].texture, a.velVar.renderTargets[next])
-  gpu.currentTextureIndex = next
+  pu.texturePosition.value = a.posVar.renderTargets[a.posIdx].texture
+  pu.textureVelocity.value = a.velVar.renderTargets[a.velIdx].texture
+  a.gpu.doRenderTarget(a.posVar.material, a.posVar.renderTargets[next])
+  a.posIdx = next
 }
 
 export default function ParticleField() {
   const gl = useThree((s) => s.gl)
   const quality = useStore((s) => s.quality)
+  const compact = useStore((s) => s.compact)
   const size = PARTICLE_TEX[quality]
   const assetsRef = useRef<FieldAssets | null>(null)
   const [assets, setAssets] = useState<FieldAssets | null>(null)
-  const velFrame = useRef(false)
+  const frame = useRef(0)
   const velDt = useRef(0)
+  const travelDir = useRef(new THREE.Vector3())
+
+  const velEvery = quality === 'low' || compact ? 3 : 2
 
   useEffect(() => {
     const built = buildAssets(gl, size)
     assetsRef.current = built
-    // GPU handles are an external resource this effect owns; deriving them
-    // during render is exactly the useMemo arrangement StrictMode breaks.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     setAssets(built)
     return () => {
       built.gpu.dispose()
@@ -159,6 +182,7 @@ export default function ParticleField() {
     if (!a) return
 
     const dt = Math.min(rawDt, 1 / 30)
+    const s = useStore.getState()
     const simTime = state.clock.elapsedTime / TAU
     const cam = state.camera.position
 
@@ -173,20 +197,34 @@ export default function ParticleField() {
     // When the dynamic pixel ratio drops, point sizes must drop with it or
     // every mote bloats on the upscaled buffer.
     mu.uPixelRatio.value = state.gl.getPixelRatio()
-    
-    velFrame.current = !velFrame.current
+    mu.uSize.value = SIZE_TIER[s.quality]
+
     velDt.current += dt
-    if (velFrame.current) {
+    frame.current++
+    const doVel = frame.current % velEvery === 0
+    if (doVel) {
       vu.uTime.value = simTime
       vu.uDt.value = velDt.current
+      vu.uBreath.value = breath(state.clock.elapsedTime)
+      if (s.phase === 'flight' || s.phase === 'settle') {
+        const cur = s.graph.nodes.get(s.currentId)
+        const prev = s.previousId ? s.graph.nodes.get(s.previousId) : null
+        if (cur && prev) {
+          travelDir.current.copy(cur.worldPosition).sub(prev.worldPosition)
+          if (travelDir.current.lengthSq() > 1e-6) travelDir.current.normalize()
+        }
+        ;(vu.uTravelDir.value as THREE.Vector3).copy(travelDir.current)
+        const ft = Math.min(1, (s.travelClock - TRAVEL.turn) / (TRAVEL_TOTAL - TRAVEL.turn))
+        vu.uTravelBoost.value = Math.sin(Math.max(0, ft) * Math.PI) * 10
+      } else {
+        vu.uTravelBoost.value = 0
+      }
       velDt.current = 0
-      pu.uDt.value = dt
-      a.gpu.compute()
-    } else {
-      positionOnlyStep(a, dt)
     }
-    mu.uPositions.value = a.gpu.getCurrentRenderTarget(a.posVar).texture
-    mu.uVelocities.value = a.gpu.getCurrentRenderTarget(a.velVar).texture
+    step(a, dt, doVel)
+
+    mu.uPositions.value = a.posVar.renderTargets[a.posIdx].texture
+    mu.uVelocities.value = a.velVar.renderTargets[a.velIdx].texture
   })
 
   if (!assets) return null

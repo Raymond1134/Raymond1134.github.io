@@ -10,8 +10,8 @@ const TURN_CLOSED_AT = 0.85
 /* Fraction of the settle the veil stays at peak before opening. */
 const SETTLE_HOLD = 0.22
 
-/* Peak opacity.*/
-const VEIL_PEAK = 0.22
+/* Peak opacity. Raised with the dome: the blink has a brighter world to dim. */
+const VEIL_PEAK = 0.26
 
 const VEIL_COLOR = '#080614'
 

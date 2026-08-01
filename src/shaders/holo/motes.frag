@@ -20,4 +20,6 @@ void main() {
   col = mix(col, vec3(1.0), exp(-r2 * 6.0) * 0.5);
 
   gl_FragColor = vec4(col, a * vGain * uOpacity);
+
+  #include <colorspace_fragment>
 }

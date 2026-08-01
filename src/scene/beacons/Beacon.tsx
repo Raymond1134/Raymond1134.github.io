@@ -11,8 +11,10 @@ import beaconVert from '@/shaders/beacon/beacon.vert'
 import coreFrag from '@/shaders/beacon/core.frag'
 import motesVert from '@/shaders/beacon/motes.vert'
 import motesFrag from '@/shaders/beacon/motes.frag'
-import { glowTexture } from '@/scene/glowTexture'
+import { glowTexture, chromaticGlowTexture } from '@/scene/glowTexture'
+import { ATMOSPHERE_ORDER } from '@/scene/renderOrder'
 import { BEACON_DEFAULT_COLOR } from './palette'
+import type { Quality } from '@/state/store'
 
 const TAP_TARGET_FACTOR = 0.11
 
@@ -24,10 +26,10 @@ const MOTE_COUNT = 800
 
 const CLUSTER_COLORS = [
   '#ffd0a6', // orange
-  '#fff2b0', // yellow
-  '#ffbfe8', // pink
-  '#e1b5ff', // purple
-  '#b3d9ff', // blue
+  '#ffe4b8', // pale gold
+  '#ffd9c9', // peach
+  '#f0c8e8', // rose
+  '#cfd4f2', // lavender-white
 ] as const
 
 const CLUSTERS = CLUSTER_COLORS.length
@@ -35,7 +37,10 @@ const ORBIT_RADIUS = 1.85
 const MOTE_DENSITY_TRIM = 0.95
 
 const ROLE_GAIN = { current: 0.8, reachable: 0.9, distant: 0.45 } as const
-const HALO_GAIN = { current: 0.34, reachable: 0.7, distant: 0.35 } as const
+const HALO_GAIN = { current: 0.29, reachable: 0.6, distant: 0.3 } as const
+const MOTE_TIER: Record<Quality, number> = { low: 300, medium: 500, high: 800, ultra: 800 }
+const ATMO_OPACITY = 0.045
+const LABEL_REST = 0.62
 
 interface Props {
   node: GraphNode
@@ -121,10 +126,12 @@ export default function Beacon({ node, role }: Props) {
   const group = useRef<THREE.Group>(null!)
   const scaleT = useRef(role === 'current' ? 1 : BEACON_SCALE)
   const prevRole = useRef(role)
+  const boostT = useRef(1)
   const core = useRef<THREE.Mesh>(null!)
   const motes = useRef<THREE.Points>(null!)
   const glowInner = useRef<THREE.Sprite>(null!)
   const glowOuter = useRef<THREE.Sprite>(null!)
+  const atmo = useRef<THREE.Sprite>(null!)
   const hit = useRef<THREE.Mesh>(null!)
   const label = useRef<THREE.Group>(null)
   const labelText = useRef<THREE.Mesh>(null)
@@ -133,8 +140,11 @@ export default function Beacon({ node, role }: Props) {
   const setHovered = useStore((s) => s.setHovered)
   const travelTo = useStore((s) => s.travelTo)
   const phase = useStore((s) => s.phase)
+  const pendingId = useStore((s) => s.pendingId)
   const canHoverPointer = useStore((s) => s.hover)
   const coarse = useStore((s) => s.coarse)
+  const compact = useStore((s) => s.compact)
+  const quality = useStore((s) => s.quality)
   const color = useMemo(() => new THREE.Color(node.color ?? BEACON_DEFAULT_COLOR), [node.color])
 
   const outerColor = useMemo(
@@ -151,6 +161,14 @@ export default function Beacon({ node, role }: Props) {
     [],
   )
 
+  const atmoColor = useMemo(
+    () => color.clone().lerp(new THREE.Color(site.meta.themeColorMid), 0.4),
+    [color],
+  )
+
+  const atmoOn =
+    !(quality === 'low' || compact) && (quality !== 'medium' || role === 'current')
+
   const clusterSeed = useMemo(() => hash01(node.id, 41) * 97.3, [node.id])
   const seed = useMemo(() => hash01(node.id, 7) * Math.PI * 2, [node.id])
   const [assets, setAssets] = useState<BeaconAssets | null>(null)
@@ -165,6 +183,10 @@ export default function Beacon({ node, role }: Props) {
       built.moteGeo.dispose()
     }
   }, [color, coolColor, clusterSeed, node.id])
+
+  useEffect(() => {
+    assets?.moteGeo.setDrawRange(0, Math.min(MOTE_COUNT, MOTE_TIER[quality]))
+  }, [assets, quality])
 
   /* Only reachable beacons respond. */
   const interactive = role === 'reachable' && phase === 'idle'
@@ -193,7 +215,15 @@ export default function Beacon({ node, role }: Props) {
       0.06 * Math.sin(t * 2.37 + seed * 2.1) +
       0.04 * Math.sin(t * 0.61 + seed * 3.7)
 
-    const gain = ROLE_GAIN[role] * flicker * (1 + h * 1.8)
+    const d = state.camera.position.distanceTo(node.worldPosition)
+    const nearAtt = THREE.MathUtils.smoothstep(d, 3, 10)
+
+    const isGoal =
+      phase === 'turn' ? pendingId === node.id : phase !== 'idle' && role === 'current'
+    const boost = (boostT.current +=
+      ((isGoal ? 1.8 : 1) - boostT.current) * (1 - Math.pow(0.02, dt)))
+
+    const gain = ROLE_GAIN[role] * flicker * (1 + h * 1.8) * nearAtt * boost
     const cm = core.current.material as THREE.ShaderMaterial
     const mm = motes.current.material as THREE.ShaderMaterial
 
@@ -201,32 +231,41 @@ export default function Beacon({ node, role }: Props) {
     cm.uniforms.uIntensity.value = gain
     cm.uniforms.uTime.value = t
 
+    const farAtt = 1 - THREE.MathUtils.smoothstep(d, 400, 500)
+    motes.current.visible = farAtt > 0.01
+
     mm.uniforms.uTime.value = t
-    mm.uniforms.uIntensity.value = gain * MOTE_DENSITY_TRIM * (role === 'distant' ? 0.5 : 1) * (1 + h * 0.6)
+    mm.uniforms.uIntensity.value =
+      gain * MOTE_DENSITY_TRIM * (role === 'distant' ? 0.5 : 1) * (1 + h * 0.6) * farAtt
     mm.uniforms.uPixelRatio.value = state.gl.getPixelRatio()
     mm.uniforms.uScale.value = sc
     motes.current.scale.setScalar(1 + h * 0.6)
 
-    const d = state.camera.position.distanceTo(node.worldPosition)
     const base = THREE.MathUtils.clamp(0.27 * Math.pow(d, 0.7), 1.0, 26)
     glowInner.current.scale.setScalar(base * 0.4 * (1 + h * 0.6))
     glowOuter.current.scale.setScalar(base * 1.25 * (1 + h * 0.85))
     ;(glowInner.current.material as THREE.SpriteMaterial).opacity =
-      HALO_GAIN[role] * flicker * (1 + h * 1.5)
+      HALO_GAIN[role] * flicker * (1 + h * 1.5) * nearAtt * boost
     ;(glowOuter.current.material as THREE.SpriteMaterial).opacity =
-      HALO_GAIN[role] * 0.2 * flicker * (1 + h * 1.5)
-      
+      HALO_GAIN[role] * 0.2 * flicker * (1 + h * 1.5) * nearAtt * boost
+
+    if (atmo.current) {
+      atmo.current.scale.setScalar(base * 3.2)
+      ;(atmo.current.material as THREE.SpriteMaterial).opacity =
+        ATMO_OPACITY * (0.88 + 0.12 * flicker) * nearAtt
+    }
+
     hit.current.scale.setScalar(THREE.MathUtils.clamp(d * TAP_TARGET_FACTOR, 6, 46) / sc)
 
     if (label.current) {
       label.current.scale.setScalar(Math.max(1.1, d * 0.028) / sc)
 
-      const o = phase === 'idle' ? (coarse ? 1 : h) : 0
+      const o = phase === 'idle' ? (coarse ? 1 : LABEL_REST + (1 - LABEL_REST) * h) : 0
       label.current.visible = o > 0.01
       if (labelText.current) {
         const tt = labelText.current as unknown as { fillOpacity: number; outlineOpacity: number }
         tt.fillOpacity = o
-        tt.outlineOpacity = o
+        tt.outlineOpacity = Math.min(1, o * 1.5)
       }
     }
   })
@@ -296,10 +335,10 @@ export default function Beacon({ node, role }: Props) {
         </Billboard>
       )}
 
+      {/* The bake carries the colour ramp; the material stays white. */}
       <sprite ref={glowOuter}>
         <spriteMaterial
-          map={glowTexture()}
-          color={outerColor}
+          map={chromaticGlowTexture(outerColor)}
           transparent
           depthWrite={false}
           blending={THREE.AdditiveBlending}
@@ -309,8 +348,7 @@ export default function Beacon({ node, role }: Props) {
       </sprite>
       <sprite ref={glowInner}>
         <spriteMaterial
-          map={glowTexture()}
-          color={color}
+          map={chromaticGlowTexture(color)}
           transparent
           depthWrite={false}
           blending={THREE.AdditiveBlending}
@@ -318,6 +356,20 @@ export default function Beacon({ node, role }: Props) {
           fog={false}
         />
       </sprite>
+      {atmoOn && (
+        <sprite ref={atmo} renderOrder={ATMOSPHERE_ORDER}>
+          <spriteMaterial
+            map={glowTexture()}
+            color={atmoColor}
+            transparent
+            opacity={0}
+            depthWrite={false}
+            blending={THREE.AdditiveBlending}
+            toneMapped={false}
+            fog={false}
+          />
+        </sprite>
+      )}
     </group>
   )
 }
