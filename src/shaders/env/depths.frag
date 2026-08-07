@@ -1,6 +1,9 @@
 precision highp float;
 
 #include ../lib/noise3D;
+#include ../lib/grade;
+#include ../lib/chroma;
+#include ../lib/dither;
 
 uniform vec3  uNadir;
 uniform vec3  uMid;
@@ -9,29 +12,64 @@ uniform vec3  uVeilCold;
 uniform vec3  uVeilMid;
 uniform float uTime;
 uniform float uBreath;
-uniform float uEnvGain;
+uniform float uDomeGain;
+uniform float uVeils;
+uniform float uEnvAmbientClamp;
+uniform float uEnvSourcedClamp;
+uniform float uExposure;
+uniform vec3  uAuroraDir;
+uniform float uAuroraGain;
+uniform vec2  uResolution;
 uniform vec3  uLightDir[DEPTHS_LIGHTS];
 uniform vec3  uLightCol[DEPTHS_LIGHTS];
 uniform float uLightW[DEPTHS_LIGHTS];
 
+uniform float uBendAmp;
+uniform float uBendT;
+
 varying vec3 vDir;
 
-float hash12(vec2 p) {
-  return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453);
+#if DEPTHS_BEND
+vec3 skyOffset(vec3 d, float t) {
+  vec3 q = vec3(d.x * 1.9, d.y * 0.55, d.z * 1.9);
+  float lift = snoise(q + vec3(0.0, t * 0.019, t * 0.011));
+  float chop = snoise(q * 2.74 + vec3(t * 0.041, 0.0, -t * 0.026));
+  vec3 T = normalize(cross(d, vec3(0.0, 1.0, 0.0)) + vec3(1e-4));
+  vec3 B = cross(d, T);
+  return T * (chop * 0.32) + B * (lift * 0.68);
+}
+#endif
+
+float gradCh(float y, float nadir, float mid, float zenith) {
+  return mix(mix(nadir, mid, smoothstep(-0.75, 0.22, y)), zenith, smoothstep(0.10, 0.90, y));
 }
 
 void main() {
   vec3 d = normalize(vDir);
 
-  // Vertical script: violet-black beneath, THE color of "far" at eye level,
-  // a broad slate lift far above. No horizon line anywhere.
-  vec3 col = mix(uNadir, uMid, smoothstep(-0.65, 0.10, d.y));
-  col = mix(col, uZenith, smoothstep(0.05, 0.85, d.y));
+#if DEPTHS_BEND
+  vec3 off = skyOffset(d, uBendT);
+  float bendK = min(uBendAmp, 0.13);
+  vec3 dR = normalize(d + off * (bendK * 0.955));
+  vec3 dG = normalize(d + off * bendK);
+  vec3 dB = normalize(d + off * (bendK * 1.072));
+  vec3 aR = normalize(d + off * (bendK * 0.865));
+  vec3 aB = normalize(d + off * (bendK * 1.216));
+#else
+  vec3 dR = d; vec3 dG = d; vec3 dB = d;
+  vec3 aR = d; vec3 aB = d;
+#endif
+
+  vec3 col = vec3(
+    gradCh(dR.y, uNadir.r, uMid.r, uZenith.r),
+    gradCh(dG.y, uNadir.g, uMid.g, uZenith.g),
+    gradCh(dB.y, uNadir.b, uMid.b, uZenith.b));
+
+  col = gelTint(col, d.x * 1.6 - d.y * 2.4 + uTime * 0.015, 0.22);
 
 #if DEPTHS_OCT > 0
-  vec3 q = d * 2.3 + vec3(0.0, uTime * 0.008, uTime * 0.005);
+  vec3 q = dG * 2.3 + vec3(0.0, uTime * 0.008, uTime * 0.005);
 #if DEPTHS_WARP
-  // Domain warp: turns banded fbm into slow drifting veils.
   q += 0.6 * vec3(
     snoise(d * 1.7 + vec3(uTime * 0.010, 0.0, 0.0)),
     snoise(d * 1.9 + vec3(0.0, -uTime * 0.008, 0.0)),
@@ -47,27 +85,38 @@ void main() {
     amp *= 0.5;
     q *= 2.1;
   }
-  float veil = smoothstep(0.35, 0.85, n / tot * 0.5 + 0.5);
-  col += (uVeilCold * 0.055 + uVeilMid * 0.030) * veil;
+  float veil = smoothstep(0.52, 0.95, n / tot * 0.5 + 0.5);
+
+  float lobe = pow(max(dot(d, uAuroraDir), 0.0), 6.0);
+  float aurora = 1.0 + uAuroraGain * lobe;
+
+  vec3 veilCol = uVeilCold * (uVeils + 0.05 * uAuroraGain * lobe) + uVeilMid * 0.018;
+  veilCol = gelTint(veilCol, d.x * 2.0 + d.y * 3.0 + uTime * 0.035, 0.62);
+  col += veilCol * veil * aurora;
 #endif
 
-  // Sourced warmth: each hearth stains the water toward itself, weighted by
-  // its distance. This is the only warm thing the environment ever does.
+  col *= (0.92 + 0.08 * uBreath) * uDomeGain;
+
+  col = min(col, vec3(uEnvAmbientClamp));
+
   for (int i = 0; i < DEPTHS_LIGHTS; i++) {
-    col += uLightCol[i] * (uLightW[i] * pow(max(dot(d, uLightDir[i]), 0.0), 24.0));
+    vec3 stain = uLightCol[i] * uLightW[i];
+    col += stain * vec3(
+      pow(max(dot(aR, uLightDir[i]), 0.0), 24.0),
+      pow(max(dot(dG, uLightDir[i]), 0.0), 24.0),
+      pow(max(dot(aB, uLightDir[i]), 0.0), 24.0));
   }
 
-  col *= (0.92 + 0.08 * uBreath) * uEnvGain;
+  col = min(col, vec3(uEnvSourcedClamp));
 
-  // The environment is a stage, never a light: hard ceiling, then a dither
-  // so the deep gradients don't band on 8-bit output.
-  col = min(col, vec3(0.30));
-  col += (hash12(gl_FragCoord.xy) - 0.5) / 255.0;
+  col = bandBreak3(col, gl_FragCoord.xy, 0.0, DITHER_K);
+
+#if PHONE_GRADE
+  col = aetherGrade(col, uExposure, PHONE_HOLD);
+  col *= aetherVignette(gl_FragCoord.xy, uResolution, 1.0);
+#endif
 
   gl_FragColor = vec4(col, 1.0);
 
-  // sRGB-encodes only when writing straight to the canvas (the composer-free
-  // path); into the composer's linear HalfFloat target three compiles this to
-  // identity. Without it, custom shaders render gamma-crushed on phones.
   #include <colorspace_fragment>
 }

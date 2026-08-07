@@ -1,17 +1,17 @@
 import { useEffect, useState } from 'react'
 import { useStore } from '@/state/store'
+import { input } from '@/input/input'
 import '@/styles/hint.css'
 
-const HINT_MS = 6000
+const HINT_MS = 9000
 const FADE_MS = 700
 const GRACE_MS = 1500
+const DRAG_PX = 14
 
-/* Shown on every load; fades after a few seconds or on the first input. */
 export default function FirstHint() {
   const coarse = useStore((s) => s.coarse)
   const [mounted, setMounted] = useState(true)
 
-  /* Only drives the fade-OUT; the fade-in is a CSS animation (see hint.css). */
   const [hiding, setHiding] = useState(false)
 
   useEffect(() => {
@@ -27,15 +27,18 @@ export default function FirstHint() {
       unmountTimer = setTimeout(() => setMounted(false), FADE_MS)
     }
 
+    const onUp = () => {
+      if (input.dragDistance > DRAG_PX) dismiss()
+    }
+
     let timer: ReturnType<typeof setTimeout> | undefined
     let graceTimer: ReturnType<typeof setTimeout> | undefined
 
     const start = () => {
       if (timer) return
       timer = setTimeout(dismiss, HINT_MS)
-      // Input only counts once the hint has had time to be read.
       graceTimer = setTimeout(() => {
-        addEventListener('pointerdown', dismiss, { passive: true })
+        addEventListener('pointerup', onUp, { passive: true })
         addEventListener('wheel', dismiss, { passive: true })
         addEventListener('keydown', dismiss)
       }, GRACE_MS)
@@ -55,8 +58,7 @@ export default function FirstHint() {
       clearTimeout(graceTimer)
       clearTimeout(unmountTimer)
       document.removeEventListener('visibilitychange', onVisible)
-      // No-ops if the grace period never elapsed and these were never added.
-      removeEventListener('pointerdown', dismiss)
+      removeEventListener('pointerup', onUp)
       removeEventListener('wheel', dismiss)
       removeEventListener('keydown', dismiss)
     }
@@ -65,8 +67,13 @@ export default function FirstHint() {
   if (!mounted) return null
 
   return (
-    <p className="hint" data-hide={hiding} role="status">
-      {coarse ? 'Drag to look · Tap a light to travel' : 'Drag to look · Click a light to travel'}
-    </p>
+    <div className="hint" data-hide={hiding} role="status">
+      <span className="hint-glyph" aria-hidden="true" />
+      <p className="hint-text">
+        {coarse
+          ? 'Drag to look around · Tap a blue light to travel'
+          : 'Drag to look around · Click a blue light to travel'}
+      </p>
+    </div>
   )
 }

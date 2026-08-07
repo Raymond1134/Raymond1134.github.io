@@ -5,37 +5,74 @@
   bottom: calc(var(--sab) + 88px);
   transform: translateX(-50%);
 
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+
   margin: 0;
+  padding: 12px 18px 11px;
   max-width: min(92vw, 460px);
   text-align: center;
 
-  font-size: 13px;
-  letter-spacing: 0.05em;
-  color: var(--ink);
+  background: rgba(9, 14, 28, 0.5);
+  border: 1px solid rgba(223, 233, 255, 0.14);
+  border-radius: 14px;
+  backdrop-filter: blur(12px) saturate(1.2);
+  -webkit-backdrop-filter: blur(12px) saturate(1.2);
 
-  text-shadow:
-    0 0 14px rgba(3, 4, 10, 0.95),
-    0 1px 3px rgba(3, 4, 10, 0.95);
-
-  /* Never intercept a drag or a tap meant for a beacon underneath. */
   pointer-events: none;
-  opacity: 0.82;
+  opacity: 0.92;
   animation: hint-in 600ms ease both;
 }
 
-@keyframes hint-in {
-  from { opacity: 0; }
-  to { opacity: 0.82; }
+.hint-text {
+  margin: 0;
+  font-size: 13px;
+  letter-spacing: 0.05em;
+  color: var(--ink);
+  text-shadow: 0 1px 3px rgba(3, 4, 10, 0.95);
 }
 
-/* Dropping the animation lets the transition take over from the current value. */
+.hint-glyph {
+  position: relative;
+  width: 52px;
+  height: 20px;
+  border: 1px solid rgba(223, 233, 255, 0.28);
+  border-radius: 999px;
+}
+
+.hint-glyph::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 7px;
+  width: 8px;
+  height: 8px;
+  margin-top: -4px;
+  border-radius: 50%;
+  background: var(--ink);
+  box-shadow: 0 0 10px rgba(223, 233, 255, 0.75);
+  animation: hint-drag 2.8s ease-in-out infinite;
+}
+
+@keyframes hint-drag {
+  0%, 12% { transform: translateX(0); }
+  46%, 62% { transform: translateX(30px); }
+  96%, 100% { transform: translateX(0); }
+}
+
+@keyframes hint-in {
+  from { opacity: 0; transform: translateX(-50%) translateY(6px); }
+  to { opacity: 0.92; transform: translateX(-50%) translateY(0); }
+}
+
 .hint[data-hide='true'] {
   animation: none;
   opacity: 0;
   transition: opacity 600ms ease;
 }
 
-/* Compact puts the HUD in a bottom bar, so clear it. */
 @media (pointer: coarse) and (max-width: 600px), (pointer: coarse) and (max-height: 600px) {
   .hint {
     bottom: calc(var(--sab) + 108px);
@@ -47,5 +84,10 @@
   .hint[data-hide='true'] {
     animation: none;
     transition: none;
+  }
+
+  .hint-glyph::before {
+    animation: none;
+    transform: translateX(15px);
   }
 }

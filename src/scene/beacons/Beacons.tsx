@@ -1,9 +1,12 @@
-import { useMemo } from 'react'
+import { useEffect, useMemo } from 'react'
 import Beacon from './Beacon'
 import { neighborsOf } from '@/content/layout'
 import { useStore } from '@/state/store'
 
 export default function Beacons() {
+  useEffect(() => {
+    useStore.getState().setBeaconsReady()
+  }, [])
   const graph = useStore((s) => s.graph)
   const currentId = useStore((s) => s.currentId)
 

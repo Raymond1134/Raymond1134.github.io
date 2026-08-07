@@ -2,7 +2,6 @@
   position: fixed;
   left: 0; right: 0;
   z-index: 25;
-  /* Sit above the bottom nav bar, which is itself above the safe area. */
   bottom: calc(var(--sab) + 60px);
   max-height: 34dvh;
   padding: 0 max(16px, var(--sal)) 12px max(16px, var(--sar));
@@ -25,7 +24,6 @@
 
 .sheet.is-expanded { max-height: 70dvh; }
 
-/* Slide away during a travel transition. */
 .sheet.is-hidden { transform: translateY(115%); opacity: 0; pointer-events: none; }
 
 .sheet-grabber {
@@ -48,7 +46,6 @@
   padding-bottom: 8px;
 }
 
-/* Full-width tap rows — much easier than inline chips on a phone. */
 .sheet-links { list-style: none; margin: 14px 0 0; padding: 0; display: grid; gap: 8px; }
 .sheet-links a {
   display: flex; align-items: center; gap: 12px;
@@ -69,7 +66,6 @@
 .sheet-links .chev { opacity: 0.5; font-size: 20px; }
 .sheet-links a:active { background: color-mix(in srgb, var(--sheet-accent) 20%, transparent); }
 
-/* Landscape phones are only ~380px tall — the sheet would eat the whole screen. */
 @media (orientation: landscape) and (max-height: 480px) {
   .sheet { max-height: 46dvh; bottom: calc(var(--sab) + 8px); left: auto; right: 0; width: 46vw; }
   .sheet.is-expanded { max-height: 78dvh; }

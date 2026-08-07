@@ -13,8 +13,6 @@
   transition: opacity 320ms ease;
 }
 
-/* Mid-travel. pointer-events off so a click can't hit a button that is about
-   to be replaced by the next beacon's neighbours. */
 .hud[data-dimmed='true'] {
   opacity: 0;
   pointer-events: none;
@@ -54,7 +52,6 @@
   cursor: default;
 }
 
-/* Pressed toggles take the light of whatever beacon you are standing at. */
 .hud-chip[data-on] {
   border-color: color-mix(in srgb, var(--hud-accent) 55%, transparent);
   background: linear-gradient(
@@ -78,7 +75,6 @@
   }
 }
 
-/* Compact: a bottom bar in the thumb zone. */
 @media (pointer: coarse) and (max-width: 600px), (pointer: coarse) and (max-height: 600px) {
   .hud {
     top: auto;
@@ -130,3 +126,31 @@
   .hud,
   .hud-chip { transition: none; }
 }
+
+
+.hud-ghost {
+  position: fixed;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: calc(var(--sab) + 76px);
+  z-index: 30;
+  min-height: var(--tap);
+  padding: 8px 18px;
+  border-radius: 999px;
+  border: 1px solid rgba(207, 224, 247, 0.16);
+  background: rgba(9, 14, 28, 0.4);
+  color: #b9c8e2;
+  opacity: 0.55;
+  font: inherit;
+  font-size: 12.5px;
+  cursor: pointer;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  animation: ghost-in 400ms ease both;
+  transition: opacity var(--dur-quick, 220ms) ease;
+}
+.hud-ghost:hover { opacity: 0.9; }
+@keyframes ghost-in { from { opacity: 0; } }
+
+@keyframes hud-invite { 0%, 100% { box-shadow: none; } 50% { box-shadow: 0 0 22px rgba(255, 217, 160, 0.45); } }
+.hud-chip[data-invite] { animation: hud-invite 1.5s ease; }

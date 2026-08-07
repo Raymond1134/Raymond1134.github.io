@@ -1,0 +1,43 @@
+.skip {
+  position: fixed;
+  z-index: 70;
+  right: calc(var(--sar, 0px) + 20px);
+  bottom: calc(var(--sab, 0px) + 20px);
+
+  min-height: 44px;
+  padding: 0 18px;
+
+  font: inherit;
+  font-size: 13px;
+  letter-spacing: 0.06em;
+  color: var(--ink);
+
+  background: rgba(8, 10, 22, 0.55);
+  border: 1px solid rgba(190, 205, 235, 0.22);
+  border-radius: 999px;
+  cursor: pointer;
+
+  opacity: 0;
+  animation: skip-in 500ms ease 0ms both;
+  transition: background 220ms ease, border-color 220ms ease;
+}
+
+.skip:hover,
+.skip:focus-visible {
+  background: rgba(14, 18, 34, 0.75);
+  border-color: rgba(210, 225, 250, 0.42);
+}
+
+.skip:focus-visible {
+  outline: 2px solid rgba(210, 225, 250, 0.75);
+  outline-offset: 2px;
+}
+
+@keyframes skip-in {
+  from { opacity: 0; }
+  to { opacity: 0.85; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .skip { animation-duration: 1ms; }
+}

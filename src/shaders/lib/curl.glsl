@@ -1,6 +1,5 @@
 #include noise3D;
 
-/** Three decorrelated noise samples; the large offsets keep the channels apart. */
 vec3 aetherPotential(vec3 p) {
   return vec3(
     snoise(p),
@@ -9,34 +8,17 @@ vec3 aetherPotential(vec3 p) {
   );
 }
 
-/**
- * curl(F) = ( dFz/dy - dFy/dz,  dFx/dz - dFz/dx,  dFy/dx - dFx/dy )
- *
- * Central differences. The result is divergence-free, which is why particles
- * form long coherent filaments instead of clumping and gapping.
- *
- * Cost: 6 potential evaluations = 18 snoise calls per particle per frame. This
- * is the single most expensive thing in the project.
- */
 vec3 curlNoise(vec3 p, float eps) {
-  vec3 dx = vec3(eps, 0.0, 0.0);
-  vec3 dy = vec3(0.0, eps, 0.0);
-  vec3 dz = vec3(0.0, 0.0, eps);
+  float h = 2.0 * eps;
 
-  vec3 px1 = aetherPotential(p + dx), px0 = aetherPotential(p - dx);
-  vec3 py1 = aetherPotential(p + dy), py0 = aetherPotential(p - dy);
-  vec3 pz1 = aetherPotential(p + dz), pz0 = aetherPotential(p - dz);
+  vec3 p0 = aetherPotential(p);
+  vec3 px = aetherPotential(p + vec3(h, 0.0, 0.0));
+  vec3 py = aetherPotential(p + vec3(0.0, h, 0.0));
+  vec3 pz = aetherPotential(p + vec3(0.0, 0.0, h));
 
-  float x = (py1.z - py0.z) - (pz1.y - pz0.y);
-  float y = (pz1.x - pz0.x) - (px1.z - px0.z);
-  float z = (px1.y - px0.y) - (py1.x - py0.x);
+  float x = (py.z - p0.z) - (pz.y - p0.y);
+  float y = (pz.x - p0.x) - (px.z - p0.z);
+  float z = (px.y - p0.y) - (py.x - p0.x);
 
-  return vec3(x, y, z) / (2.0 * eps);
-}
-
-/** Cheap hash for per-particle randomness, keyed off the particle's texel UV. */
-float hash12(vec2 p) {
-  vec3 p3 = fract(vec3(p.xyx) * 0.1031);
-  p3 += dot(p3, p3.yzx + 33.33);
-  return fract((p3.x + p3.y) * p3.z);
+  return vec3(x, y, z) / h;
 }

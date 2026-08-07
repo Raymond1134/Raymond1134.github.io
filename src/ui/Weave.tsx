@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type { CSSProperties } from 'react'
 import { useStore } from '@/state/store'
 import { site } from '@/content'
@@ -10,23 +10,60 @@ const hrefFor = (id: string) => (id === site.root ? '#/' : `#/${id}`)
 
 export default function Weave() {
   const open = useStore((s) => s.mapOpen)
-  if (!open) return null
-  return <WeaveOverlay />
+  const [render, setRender] = useState(open)
+  if (open && !render) setRender(true)
+  if (!render) return null
+  return <WeaveOverlay closing={!open} onGone={() => setRender(false)} />
 }
 
-function WeaveOverlay() {
+function WeaveOverlay({ closing, onGone }: { closing: boolean; onGone: () => void }) {
   const compact = useStore((s) => s.compact)
   const toggleMap = useStore((s) => s.toggleMap)
   const panelRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
+    if (!closing) return
+    const id = setTimeout(onGone, 400)
+    return () => clearTimeout(id)
+  }, [closing, onGone])
+
+  useEffect(() => {
     const returnTo = document.activeElement as HTMLElement | null
     panelRef.current?.focus()
-    return () => returnTo?.focus?.()
+
+    const onKey = (e: KeyboardEvent) => {
+      const panel = panelRef.current
+      if (e.key !== 'Tab' || !panel) return
+      const stops = [...panel.querySelectorAll<HTMLElement | SVGElement>('button:not([disabled]), a[href]')]
+      if (!stops.length) return
+
+      const active = document.activeElement
+      const first = stops[0]
+      const last = stops[stops.length - 1]
+      if (e.shiftKey ? active === first || active === panel : active === last) {
+        e.preventDefault()
+        ;(e.shiftKey ? last : first).focus()
+      }
+    }
+
+    addEventListener('keydown', onKey)
+    return () => {
+      removeEventListener('keydown', onKey)
+      returnTo?.focus?.()
+    }
   }, [])
 
   return (
-    <div className="weave" role="dialog" aria-modal="true" aria-label="The weave">
+    <div
+      className="weave"
+      role="dialog"
+      aria-modal="true"
+      aria-label="The weave"
+      data-closing={closing || undefined}
+      onAnimationEnd={(e) => {
+        if (e.animationName === 'weave-out') onGone()
+      }}
+    >
       <div className="weave-backdrop" onPointerDown={toggleMap} />
       <div className="weave-panel" ref={panelRef} tabIndex={-1}>
         <header className="weave-head">
@@ -44,11 +81,8 @@ function WeaveOverlay() {
   )
 }
 
-/* desktop */
-
 const VIEW = { w: 1000, h: 760 }
 
-/* Room outside the last ring for labels. */
 const MARGIN = { x: 132, y: 76 }
 
 interface Pt {
@@ -56,10 +90,6 @@ interface Pt {
   y: number
 }
 
-/**
- * The map is the sky, flattened: each light's world x/y drops straight into
- * the frame (world y up, SVG y down), then one uniform scale centres it.
- */
 function layout(graph: Graph) {
   const pts = new Map<string, Pt>()
   for (const id of graph.order) {
@@ -67,7 +97,6 @@ function layout(graph: Graph) {
     if (n) pts.set(id, { x: n.worldPosition.x, y: -n.worldPosition.y })
   }
 
-  /* Scale whatever shape the sky took to fit the frame, uniformly. */
   const xs = [...pts.values()].map((p) => p.x)
   const ys = [...pts.values()].map((p) => p.y)
   const spanX = Math.max(...xs) - Math.min(...xs)
@@ -85,7 +114,6 @@ function layout(graph: Graph) {
     }
   }
 
-  /* Threads: tree edges first, then `related` shortcuts. */
   const drawn = new Set<string>()
   const threads: { a: Pt; b: Pt; from: string; to: string; bow: number }[] = []
 
@@ -107,7 +135,6 @@ function layout(graph: Graph) {
   return { pts, threads }
 }
 
-/** A quadratic bowed off the straight line. */
 function threadPath(a: Pt, b: Pt, k: number): string {
   const dx = b.x - a.x
   const dy = b.y - a.y
@@ -179,7 +206,6 @@ function WeaveGraph() {
               href={hrefFor(id)}
               aria-current={isCurrent ? 'page' : undefined}
               aria-label={isCurrent ? `${node.title}, you are here` : `Travel to ${node.title}`}
-              /* Tapping the light you are already at just closes the weave. */
               onClick={() => isCurrent && toggleMap()}
             >
               <circle className="halo" r={18} filter="url(#weave-halo)" />
@@ -187,7 +213,6 @@ function WeaveGraph() {
               <text className="label" y={36}>
                 {node.title}
               </text>
-              {/* Generous invisible target. */}
               <circle className="hit" r={22} />
             </a>
           </g>
@@ -197,9 +222,6 @@ function WeaveGraph() {
   )
 }
 
-/* compact */
-
-/* A 1000×760 graph on a 375px screen means 6px lights. */
 function WeaveList() {
   const graph = useStore((s) => s.graph)
   const currentId = useStore((s) => s.currentId)

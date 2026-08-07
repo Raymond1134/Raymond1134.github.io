@@ -11,7 +11,6 @@ export function useViewport() {
         portrait: h > w,
         compact: isCoarsePointer() && Math.min(w, h) < 600,
       })
-      document.documentElement.style.setProperty('--vh', `${h * 0.01}px`)
     }
 
     update()

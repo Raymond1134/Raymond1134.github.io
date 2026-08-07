@@ -1,17 +1,39 @@
+@font-face {
+  font-family: 'Inter';
+  src: url('/fonts/Inter-Regular.woff') format('woff');
+  font-weight: 400;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Inter';
+  src: url('/fonts/Inter-SemiBold.woff') format('woff');
+  font-weight: 600;
+  font-display: swap;
+}
+
 :root {
   --void: #03040a;
   --aether: #7bdcff;
-  --aether-warm: #c9a4ff;
   --ink: #dfe9ff;
   --sat: env(safe-area-inset-top, 0px);
   --sar: env(safe-area-inset-right, 0px);
   --sab: env(safe-area-inset-bottom, 0px);
   --sal: env(safe-area-inset-left, 0px);
 
-  /* Minimum comfortable touch target. */
   --tap: 44px;
 
+  --dur-quick: 220ms;
+
   color-scheme: dark;
+}
+
+.grain-static {
+  position: fixed;
+  inset: 0;
+  z-index: 25;
+  pointer-events: none;
+  opacity: 0.05;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='240'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
 }
 
 * { box-sizing: border-box; }
@@ -46,7 +68,7 @@ canvas {
 
 .selectable, .holo-copy, .text-mode { user-select: text; -webkit-user-select: text; }
 
-button, [role='button'], .tappable {
+button {
   min-width: var(--tap);
   min-height: var(--tap);
   touch-action: manipulation;
@@ -55,12 +77,19 @@ button, [role='button'], .tappable {
 :focus-visible { outline: 2px solid var(--aether); outline-offset: 2px; }
 :focus:not(:focus-visible) { outline: none; }
 
+.hud .hud-chip:focus-visible,
+.weave-list .weave-row:focus-visible,
+.weave-close:focus-visible,
+.sheet-grabber:focus-visible,
+.sheet-links a:focus-visible,
+.shortcuts-panel button:focus-visible {
+  box-shadow: 0 0 0 5px rgba(3, 5, 14, 0.85);
+}
+
+a.weave-node:focus-visible .hit { stroke: var(--aether); stroke-width: 3.5; }
+
 .sr-only {
   position: absolute; width: 1px; height: 1px;
   padding: 0; margin: -1px; overflow: hidden;
   clip: rect(0 0 0 0); white-space: nowrap; border: 0;
-}
-
-@media (hover: hover) and (pointer: fine) {
-  .holo-links a:hover { }
 }

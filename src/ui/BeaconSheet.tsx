@@ -54,7 +54,6 @@ function SheetContent() {
       style={
         {
           '--sheet-accent': node.color ?? BEACON_DEFAULT_COLOR,
-          /* .holo-copy / .holo-tags are shared with the 3D panel and tint from this. */
           '--holo-accent': node.color ?? BEACON_DEFAULT_COLOR,
         } as CSSProperties
       }

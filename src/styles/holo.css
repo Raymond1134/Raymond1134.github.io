@@ -1,12 +1,8 @@
-/* The CSS3D layer never intercepts drags meant for the canvas; links opt back
-   in only once the panel has condensed (.is-live, toggled from the fade). */
 .holo-html { pointer-events: none; }
 
 .holo-body {
   font-family: 'Inter', system-ui, sans-serif;
   color: #d7e4f7;
-  /* <Html> gets zero post-processing, so the glow is faked here — tinted by
-     the beacon's own light rather than a fixed HUD cyan. */
   text-shadow:
     0 0 10px color-mix(in srgb, var(--holo-accent, #ffd9a0) 40%, transparent),
     0 0 26px color-mix(in srgb, var(--holo-accent, #ffd9a0) 18%, transparent);
@@ -27,7 +23,7 @@
 .holo-links a {
   pointer-events: none;
   display: inline-flex; align-items: center; gap: 8px;
-  min-height: var(--tap);        /* applies on touch-capable laptops/tablets too */
+  min-height: var(--tap);
   padding: 7px 18px;
   border: 1px solid color-mix(in srgb, var(--holo-accent, #ffd9a0) 45%, transparent);
   border-radius: 999px;
@@ -42,7 +38,6 @@
 }
 .holo-body.is-live .holo-links a { pointer-events: auto; }
 
-/* Gate hover so it doesn't stick after a tap on touch devices. */
 @media (hover: hover) {
   .holo-links a:hover {
     background: color-mix(in srgb, var(--holo-accent, #ffd9a0) 22%, transparent);

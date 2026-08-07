@@ -2,6 +2,7 @@ const GLYPHS: Record<string, string> = {
   github: '◆',
   linkedin: '▣',
   mail: '✉',
+  phone: '✆',
   external: '↗',
   doc: '▤',
   play: '▶',

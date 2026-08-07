@@ -1,14 +1,19 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import type { CSSProperties, ReactNode } from 'react'
 import { useStore } from '@/state/store'
-import { neighborsOf } from '@/content/layout'
-import { recentre, enableGyro, disableGyro, gyroAvailable } from '@/input/input'
+import { recentre, enableGyro, disableGyro, gyroAvailable, lookOffset, stillFor } from '@/input/input'
+import { worldEvents } from '@/scene/worldEvents'
+import { playUi } from '@/audio/score'
 import { BEACON_DEFAULT_COLOR } from '@/scene/beacons/palette'
 import '@/styles/hud.css'
 
-/* Distance a drag has to start to count as a swipe-up that opens the weave. */
 const EDGE = 56
 const SWIPE = 70
+
+const FIELD = /^(input|textarea|select)$/i
+
+const toggleShortcuts = () => dispatchEvent(new Event('aether:shortcuts'))
+const shortcutsOpen = () => !!document.querySelector('#shortcuts:not([data-closing])')
 
 export default function Hud() {
   const graph = useStore((s) => s.graph)
@@ -18,6 +23,7 @@ export default function Hud() {
   const audioEnabled = useStore((s) => s.audioEnabled)
   const gyroEnabled = useStore((s) => s.gyroEnabled)
   const textMode = useStore((s) => s.textMode)
+  const overture = useStore((s) => s.overtureActive)
   const coarse = useStore((s) => s.coarse)
 
   const travelTo = useStore((s) => s.travelTo)
@@ -25,27 +31,43 @@ export default function Hud() {
   const toggleAudio = useStore((s) => s.toggleAudio)
   const toggleTextMode = useStore((s) => s.toggleTextMode)
 
+  const [invite, setInvite] = useState(false)
+
+  const [ghost, setGhost] = useState(false)
+
   const parentId = graph.nodes.get(currentId)?.parentId ?? null
   const idle = phase === 'idle'
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.metaKey || e.ctrlKey || e.altKey) return
+      const t = e.target as HTMLElement | null
+      if (t?.isContentEditable || FIELD.test(t?.tagName ?? '')) return
       const s = useStore.getState()
+      if (s.textMode) return
+      const help = shortcutsOpen()
+
+      if (e.key === '?') return toggleShortcuts()
+      if (e.key === 'Escape' && help) return toggleShortcuts()
+      if (help) return
 
       if (e.key === 'm' || e.key === 'M') return s.toggleMap()
-      if (e.key === '0') return recentre()
+      if (e.key === '0') {
+        recentre()
+        playUi('recentre')
+        return
+      }
       if (e.key === 'Escape') {
         if (s.mapOpen) return s.toggleMap()
         const parent = s.graph.nodes.get(s.currentId)?.parentId
-        if (parent) s.travelTo(parent)
+        if (parent) {
+          s.travelTo(parent)
+        } else {
+          recentre()
+          worldEvents.homePulseAt = performance.now()
+          playUi('home')
+        }
         return
-      }
-
-      const n = Number(e.key)
-      if (n >= 1 && n <= 9) {
-        const targets = neighborsOf(s.graph, s.currentId)
-        if (targets[n - 1]) s.travelTo(targets[n - 1])
       }
     }
     addEventListener('keydown', onKey)
@@ -84,6 +106,28 @@ export default function Hud() {
     }
   }, [coarse, textMode])
 
+  useEffect(() => {
+    if (!coarse) return
+    const unsub = useStore.subscribe((s, prev) => {
+      if (prev.overtureActive && !s.overtureActive && !s.audioEnabled) {
+        setInvite(true)
+        setTimeout(() => setInvite(false), 1600)
+        unsub()
+      }
+    })
+    return unsub
+  }, [coarse])
+
+  useEffect(() => {
+    if (textMode) return
+    const id = setInterval(() => {
+      const s = useStore.getState()
+      const away = lookOffset() > 0.35
+      setGhost(s.phase === 'idle' && !s.mapOpen && away && stillFor() > 4)
+    }, 400)
+    return () => clearInterval(id)
+  }, [textMode])
+
   const onTilt = () => {
     const s = useStore.getState()
     if (s.gyroEnabled) {
@@ -99,30 +143,56 @@ export default function Hud() {
       <nav
         className="hud"
         aria-label="Site controls"
-        data-dimmed={phase === 'turn' || phase === 'flight'}
+        data-dimmed={phase === 'turn' || phase === 'flight' || overture}
         style={
           {
             '--hud-accent': graph.nodes.get(currentId)?.color ?? BEACON_DEFAULT_COLOR,
           } as CSSProperties
         }
       >
-        <Chip glyph="✦" label="Map" pressed={mapOpen} onClick={toggleMap} />
+        {!textMode && <Chip glyph="✦" label="Map" pressed={mapOpen} onClick={toggleMap} />}
+
+        {!textMode && (
+          <Chip
+            glyph="↩"
+            label="Back"
+            disabled={!parentId}
+            onClick={() => parentId && travelTo(parentId)}
+          />
+        )}
 
         <Chip
-          glyph="↩"
-          label="Back"
-          disabled={!parentId || !idle}
-          onClick={() => parentId && travelTo(parentId)}
+          glyph="♪"
+          label="Sound"
+          pressed={audioEnabled}
+          invite={invite}
+          onClick={() => {
+            if (!useStore.getState().audioEnabled) worldEvents.soundGlintAt = performance.now()
+            toggleAudio()
+          }}
         />
-
-        <Chip glyph="♪" label="Sound" pressed={audioEnabled} onClick={toggleAudio} />
 
         {coarse && gyroAvailable() && (
           <Chip glyph="◎" label="Tilt" pressed={gyroEnabled} onClick={onTilt} />
         )}
 
         <Chip glyph="≡" label="Text" pressed={textMode} onClick={toggleTextMode} />
+
+        {!textMode && <Chip glyph="?" label={coarse ? 'Help' : 'Keys'} onClick={toggleShortcuts} />}
       </nav>
+
+      {!textMode && ghost && (
+        <button
+          className="hud-ghost"
+          onClick={() => {
+            recentre()
+            playUi('recentre')
+            setGhost(false)
+          }}
+        >
+          <span aria-hidden>◎</span> recentre
+        </button>
+      )}
 
       <div className="sr-only" role="status" aria-live="polite">
         {idle ? `Arrived at ${graph.nodes.get(currentId)?.title ?? ''}` : ''}
@@ -136,12 +206,14 @@ function Chip({
   label,
   pressed,
   disabled,
+  invite,
   onClick,
 }: {
   glyph: ReactNode
   label: string
   pressed?: boolean
   disabled?: boolean
+  invite?: boolean
   onClick: () => void
 }) {
   return (
@@ -151,11 +223,11 @@ function Chip({
       disabled={disabled}
       aria-pressed={pressed}
       data-on={pressed || undefined}
+      data-invite={invite || undefined}
     >
       <span className="glyph" aria-hidden>
         {glyph}
       </span>
-      {/* The glyph alone means nothing to someone with one chance to get it. */}
       <span className="label">{label}</span>
     </button>
   )

@@ -1,29 +1,28 @@
 precision highp float;
 
 #include ../lib/noise3D;
+#include ../lib/grade;
+#include ../lib/chroma;
 
 uniform vec3  uColor;
 uniform float uTime;
+uniform float uBreath;
 uniform float uOpacity;
-uniform vec2  uSize;   // panel size in world units, so the aura tracks its shape
+uniform vec2  uSize;
+uniform float uExposure;
 
 varying vec2 vUv;
 
 void main() {
-  // Panel-local world coordinates, origin at the centre.
   vec2 p = (vUv - 0.5) * uSize;
 
   float margin = min(2.7, uSize.y * 0.155);
   vec2 q = abs(p) - (uSize * 0.5 - margin - 1.5);
   float d = length(max(q, 0.0)) + min(max(q.x, q.y), 0.0) - 1.5;
 
-  // Dissolve before the plane's hard edge can clip the glow.
   vec2 m = uSize * 0.5 - abs(p);
   float edgeFade = smoothstep(0.0, 1.5, min(m.x, m.y));
 
-  // Light wells up from the beacon: strongest low, quietest at the top, so
-  // the thread never fights the title for attention. Capped below 1 — past
-  // that the rim clips to white and reads as signage, not apparition.
   float well = 0.18 + 0.55 * smoothstep(-uSize.y * 0.5, uSize.y * 0.5, -p.y);
 
   float rim = 0.0;
@@ -42,13 +41,16 @@ void main() {
            * sin(p.y * 0.21 - uTime * 0.52 + sin(p.x * 0.12 + uTime * 0.11) * 2.0);
   float veil = inside * mist * 0.045;
 
-  // The apparition breathes; it does not flicker.
-  float breathe = 0.93 + 0.07 * sin(uTime * 0.9);
+  float breathe = 0.86 + 0.14 * uBreath;
 
   float alpha = (veil + rim * 0.48) * edgeFade * breathe * uOpacity;
-  // The filament leans toward white so it reads as light — but stays the
-  // beacon's colour everywhere else.
   vec3 col = uColor * (0.6 + rim * 1.5 + veil * 3.0) + vec3(core * core * 0.2 * well);
+
+  col = gelTint(col, (p.x - p.y) * 0.10 + uTime * 0.13, 0.22);
+
+#if PHONE_GRADE
+  col = aetherGrade(col, uExposure, PHONE_HOLD);
+#endif
 
   gl_FragColor = vec4(col, alpha);
 

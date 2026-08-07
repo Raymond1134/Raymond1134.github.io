@@ -1,4 +1,3 @@
-// curl.glsl already pulls in noise3D; including both redefines snoise.
 #include ../lib/curl;
 
 uniform float uTime;
@@ -11,9 +10,13 @@ uniform float uCondense;
 uniform vec3  uTravelDir;
 uniform float uTravelBoost;
 uniform float uBreath;
-
-// `resolution` is #defined by GPUComputationRenderer; the texturePosition and
-// textureVelocity samplers are injected automatically.
+uniform vec4  uPointer;
+uniform vec3  uViewDir;
+uniform vec3  uPulseOrigin;
+uniform float uPulseRadius;
+uniform float uPulseBand;
+uniform float uPulseForce;
+uniform vec4  uAttract;
 
 void main() {
   vec2 uv = gl_FragCoord.xy / resolution.xy;
@@ -23,23 +26,15 @@ void main() {
   vec3 vel = velData.xyz;
   float seed = velData.w;
 
-  // The one breath: currents swell ±10%, the gather ±15%, in phase with the
-  // dome and the bloom. Inhale draws the sea together.
   float breathCurl = 1.0 + (uBreath - 0.5) * 0.2;
   float breathCond = 1.0 + (uBreath - 0.5) * 0.3;
 
-  // (a) Macro river: one world-scale current, shared by every particle, so
-  // the sea organizes into a few readable streams. Wavelength ~91 units —
-  // under the 120-unit wrap box, so no kink at the seam.
   vec3 macro = curlNoise(pos * 0.011 + vec3(0.0, uTime * 0.012, uTime * 0.008), 0.6)
              * (uCurlAmp * 1.4 * breathCurl);
 
-  // (b) Condensation: gradient descent onto the zero level-set of a slow
-  // noise — particles gather into veil-like sheets with emptier water
-  // between them. This is what turns fuzz into structure.
   vec3 gp = pos * 0.012 + vec3(uTime * 0.006, 0.0, uTime * 0.004);
   float n = snoise(gp);
-  const float E = 0.25;   // in noise space: world-space diffs vanish at this frequency
+  const float E = 0.25;
   vec3 grad = vec3(
     snoise(gp + vec3(E, 0.0, 0.0)) - n,
     snoise(gp + vec3(0.0, E, 0.0)) - n,
@@ -47,18 +42,41 @@ void main() {
   ) / E;
   vec3 gather = -grad * n * (uCondense * breathCond * (0.4 + 0.6 * seed));
 
-  // (c) Micro shimmer, demoted: fine per-particle life on top of the rivers.
-  // Sampled from WORLD position at a fixed frequency, so the field belongs
-  // to the universe rather than the viewer.
   vec3 micro = curlNoise(pos * uCurlFreq + vec3(0.0, uTime * 0.05, uTime * 0.03), 0.35)
-             * (uCurlAmp * 0.55) * (0.55 + 0.9 * seed);
+             * (uCurlAmp * 0.4) * (0.55 + 0.9 * seed);
 
   vel += (macro + gather + micro) * uDt;
 
-  // (d) Travel current: while you fly, the whole medium streams with you.
   vel += uTravelDir * (uTravelBoost * uDt);
 
-  vel *= pow(uDamping, uDt * 60.0);   // frame-rate independent
+  if (uPointer.w > 0.001) {
+    vec3 tp = uPointer.xyz - pos;
+    float pd2 = dot(tp, tp);
+    if (pd2 < 400.0) {
+      float fall = exp(-pd2 / 49.0);
+      vec3 away = -tp / max(sqrt(pd2), 1e-3);
+      vec3 tang = cross(tp, uViewDir);
+      float tl = length(tang);
+      if (tl > 1e-4) tang /= tl;
+      vel += (0.6 * away + 0.4 * tang) * (uPointer.w * 5.0 * fall * uDt);
+    }
+  }
+
+  if (uPulseForce > 0.001) {
+    vec3 rp = pos - uPulseOrigin;
+    float rd = max(length(rp), 1e-3);
+    float band = exp(-pow((rd - uPulseRadius) / uPulseBand, 2.0));
+    vel += (rp / rd) * (uPulseForce * band * uDt);
+  }
+
+  float isFly = step(0.72, seed) * (1.0 - step(0.97, seed));
+  if (uAttract.w > 0.001 && isFly > 0.5) {
+    vec3 ap = uAttract.xyz - pos;
+    float ad2 = dot(ap, ap);
+    vel += (ap / max(sqrt(ad2), 1e-3)) * (uAttract.w * exp(-ad2 / 900.0) * uDt);
+  }
+
+  vel *= pow(uDamping, uDt * 60.0);
   float sp = length(vel);
   if (sp > uMaxSpeed) vel *= uMaxSpeed / sp;
 

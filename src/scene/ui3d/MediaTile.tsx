@@ -116,7 +116,7 @@ function VideoTile({ media, position, width: w, accent, fadeRef }: TileProps) {
     video.crossOrigin = 'anonymous'
     video.loop = true
     video.muted = true
-    video.playsInline = true      // iOS: without this the video hijacks the screen fullscreen
+    video.playsInline = true
     video.setAttribute('playsinline', '')
     video.setAttribute('webkit-playsinline', '')
     video.preload = coarse ? 'none' : 'auto'
@@ -187,7 +187,6 @@ function VideoTile({ media, position, width: w, accent, fadeRef }: TileProps) {
 
       <TileChrome w={w} h={h} accent={accent} fadeRef={fadeRef} />
 
-      {/* Tap-to-play affordance. */}
       {!playing && (
         <mesh position={[0, 0, 0.05]}>
           <circleGeometry args={[Math.min(w, h) * 0.13, 32]} />

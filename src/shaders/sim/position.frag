@@ -1,5 +1,7 @@
+#include ../lib/noise3D;
+
 uniform float uDt;
-uniform vec3  uCenter;     // the viewer; the field wraps around this
+uniform vec3  uCenter;
 uniform float uBoxHalf;
 
 void main() {
@@ -10,10 +12,11 @@ void main() {
 
   pos += vel * uDt;
 
-  // Toroidal wrap around the viewer
   vec3 d = pos - uCenter;
   d = mod(d + uBoxHalf, uBoxHalf * 2.0) - uBoxHalf;
   pos = uCenter + d;
 
-  gl_FragColor = vec4(pos, 1.0);
+  float voidN = snoise(pos * 0.006);
+
+  gl_FragColor = vec4(pos, voidN);
 }
