@@ -6,7 +6,6 @@ export interface GraphNode extends Beacon {
   parentId: string | null
   worldPosition: THREE.Vector3
 
-  /* Unit vector pointing away from the parent. */
   outward: THREE.Vector3
 }
 
@@ -34,7 +33,6 @@ export function buildGraph(site: Site): Graph {
   const root = byId.get(site.root)
   if (!root) throw new Error(`site.root "${site.root}" is not a beacon id`)
 
-  /* Claim children breadth-first. */
   const kids = new Map<string, Beacon[]>()
   const seen = new Set([root.id])
   const claim = (b: Beacon) => {
@@ -102,7 +100,6 @@ export function buildGraph(site: Site): Graph {
   return { nodes, order, rootId: site.root }
 }
 
-/* Beacons reachable in one hop: children + parent + siblings. */
 export function neighborsOf(graph: Graph, id: string): string[] {
   const node = graph.nodes.get(id)
   if (!node) return []

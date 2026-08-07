@@ -1,30 +1,29 @@
-/* Movement (px) beyond which a pointer sequence is a drag, not a tap. */
+import { isCoarsePointer } from '@/device'
+import { LAMBDA } from '@/motion/tokens'
+
 export const TAP_SLOP = 12
 
-/* A drag is meant to carry the bit of space under the pointer along with it,
- * so the right value is kept up to date by CameraRig via `setLookScale`. */
 let lookScale = 0.0012
 
 export function setLookScale(radiansPerPixel: number) {
   lookScale = radiansPerPixel
 }
 
-/* Just short of straight up/down — at exactly 90 the view rolls. */
 const MAX_PITCH = Math.PI * 0.48
+
+const coarse = isCoarsePointer()
 
 export const input = {
   look: { yaw: 0, pitch: 0 },
 
-  /* Dolly offset in world units; negative = closer. */
   dolly: 0,
 
-  /* Pixels travelled in the current pointer sequence. */
   dragDistance: 0,
 
-  /* True while at least one pointer is down. */
   dragging: false,
 
-  /* Set by the gyro handler when enabled; added to `look` when non-null. */
+  pointer: { x: 0, y: 0, active: false, speed: 0, movedAt: 0 },
+
   gyro: null as { x: number; y: number } | null
 }
 
@@ -40,14 +39,22 @@ let startY = 0
 let pinchStart = 0
 let dollyStart = 0
 let lastInteraction = typeof performance !== 'undefined' ? performance.now() : 0
+let lastPX = 0
+let lastPY = 0
+
+const recentring = { on: false }
 
 const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v))
 const gap = (a: Tracked, b: Tracked) => Math.hypot(a.x - b.x, a.y - b.y)
+
+export const stillFor = () =>
+  (performance.now() - lastInteraction) / 1000
 
 export function attachInput(el: HTMLElement): () => void {
   const onDown = (e: PointerEvent) => {
     active.set(e.pointerId, { id: e.pointerId, x: e.clientX, y: e.clientY })
     el.setPointerCapture?.(e.pointerId)
+    recentring.on = false
 
     if (active.size === 1) {
       startX = e.clientX
@@ -63,6 +70,17 @@ export function attachInput(el: HTMLElement): () => void {
   }
 
   const onMove = (e: PointerEvent) => {
+    const now = performance.now()
+    const p = input.pointer
+    const dtm = Math.max(1, now - p.movedAt)
+    p.speed = (Math.hypot(e.clientX - lastPX, e.clientY - lastPY) / dtm) * 1000
+    p.x = (e.clientX / Math.max(1, el.clientWidth)) * 2 - 1
+    p.y = -(e.clientY / Math.max(1, el.clientHeight)) * 2 + 1
+    p.movedAt = now
+    p.active = coarse ? active.size > 0 : true
+    lastPX = e.clientX
+    lastPY = e.clientY
+
     const prev = active.get(e.pointerId)
     if (!prev) return
 
@@ -70,7 +88,8 @@ export function attachInput(el: HTMLElement): () => void {
     const dy = e.clientY - prev.y
     active.set(e.pointerId, { id: e.pointerId, x: e.clientX, y: e.clientY })
     input.dragDistance = Math.hypot(e.clientX - startX, e.clientY - startY)
-    lastInteraction = performance.now()
+    lastInteraction = now
+    recentring.on = false
 
     if (active.size === 2) {
       const [a, b] = [...active.values()]
@@ -89,13 +108,19 @@ export function attachInput(el: HTMLElement): () => void {
     if (active.size === 0) {
       input.dragging = false
       pinchStart = 0
+      if (coarse) input.pointer.active = false
     }
+  }
+
+  const onLeave = () => {
+    input.pointer.active = false
   }
 
   const onWheel = (e: WheelEvent) => {
     e.preventDefault()
     input.dolly = clamp(input.dolly + e.deltaY * 0.012, -14, 16)
     lastInteraction = performance.now()
+    recentring.on = false
   }
 
   const onDouble = () => recentre()
@@ -105,6 +130,7 @@ export function attachInput(el: HTMLElement): () => void {
   el.addEventListener('pointermove', onMove)
   el.addEventListener('pointerup', onUp)
   el.addEventListener('pointercancel', onUp)
+  el.addEventListener('pointerleave', onLeave)
   el.addEventListener('wheel', onWheel, { passive: false })
   el.addEventListener('dblclick', onDouble)
   el.addEventListener('gesturestart', stopGesture)
@@ -115,6 +141,7 @@ export function attachInput(el: HTMLElement): () => void {
     el.removeEventListener('pointermove', onMove)
     el.removeEventListener('pointerup', onUp)
     el.removeEventListener('pointercancel', onUp)
+    el.removeEventListener('pointerleave', onLeave)
     el.removeEventListener('wheel', onWheel)
     el.removeEventListener('dblclick', onDouble)
     el.removeEventListener('gesturestart', stopGesture)
@@ -123,12 +150,9 @@ export function attachInput(el: HTMLElement): () => void {
 }
 
 export function recentre() {
-  input.look.yaw = 0
-  input.look.pitch = 0
-  input.dolly = 0
+  recentring.on = true
 }
 
-/* Tilt-to-peek. Opt-in: it costs a permission prompt on iOS */
 const DEG = Math.PI / 180
 const GYRO_GAIN = 0.75
 const GYRO_MAX = 0.55
@@ -137,7 +161,6 @@ let detachGyro: (() => void) | null = null
 
 export const gyroAvailable = () => typeof DeviceOrientationEvent !== 'undefined'
 
-/* Call straight from a click handler */
 export function enableGyro(): Promise<boolean> {
   const ctor = DeviceOrientationEvent as unknown as { requestPermission?: () => Promise<string> }
   const ask = ctor?.requestPermission?.() ?? Promise.resolve('granted')
@@ -174,7 +197,6 @@ function attachGyro() {
     const yaw = clamp(-(roll - base.roll) * DEG * GYRO_GAIN, -GYRO_MAX, GYRO_MAX)
     const pitch = clamp((tip - base.tip) * DEG * GYRO_GAIN, -GYRO_MAX, GYRO_MAX)
 
-    /* Raw orientation is jittery. */
     smoothed.x += (yaw - smoothed.x) * 0.12
     smoothed.y += (pitch - smoothed.y) * 0.12
     input.gyro = smoothed
@@ -190,22 +212,37 @@ function attachGyro() {
   }
 }
 
-/* Seconds of stillness before the dolly eases home / the view starts drifting. */
-const DOLLY_SETTLE_AFTER = 2.5
-const DRIFT_AFTER = 7
+const LOOK_RETURN_AFTER = 45
 
 const TWO_PI = Math.PI * 2
 
 export function settleInput(dt: number) {
   if (input.dragging) return
-  const still = (performance.now() - lastInteraction) / 1000
-  if (still < DOLLY_SETTLE_AFTER) return
 
-  input.dolly += -input.dolly * (1 - Math.pow(0.85, dt))
-  
-  if (still < DRIFT_AFTER) return
-  const k = 1 - Math.pow(0.88, dt)
+  if (recentring.on) {
+    const k = 1 - Math.exp(-5 * dt)
+    const home = Math.round(input.look.yaw / TWO_PI) * TWO_PI
+    input.look.yaw += (home - input.look.yaw) * k
+    input.look.pitch -= input.look.pitch * k
+    input.dolly -= input.dolly * k
+    if (
+      Math.abs(input.look.yaw - home) < 0.002 &&
+      Math.abs(input.look.pitch) < 0.002 &&
+      Math.abs(input.dolly) < 0.02
+    ) {
+      recentring.on = false
+    }
+    return
+  }
+
+  if (stillFor() < LOOK_RETURN_AFTER) return
+  const k = 1 - Math.exp(-LAMBDA.tide * dt)
   const home = Math.round(input.look.yaw / TWO_PI) * TWO_PI
   input.look.yaw += (home - input.look.yaw) * k
   input.look.pitch -= input.look.pitch * k
+}
+
+export const lookOffset = () => {
+  const yaw = input.look.yaw - Math.round(input.look.yaw / TWO_PI) * TWO_PI
+  return Math.hypot(yaw, input.look.pitch)
 }

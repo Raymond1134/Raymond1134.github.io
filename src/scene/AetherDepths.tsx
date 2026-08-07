@@ -6,23 +6,24 @@ import depthsFrag from '@/shaders/env/depths.frag'
 import { site } from '@/content'
 import { useStore, travelProgress } from '@/state/store'
 import { breath } from './breath'
+import { worldEvents } from './worldEvents'
+import { LUM, DOME_STOPS } from './lightPyramid'
 import { DEPTHS_ORDER } from './renderOrder'
 import { NO_COMPOSER } from './composerPolicy'
 import { BEACON_DEFAULT_COLOR } from './beacons/palette'
 
-const NADIR = '#040310'
-const MID = '#0a0e22'
-const ZENITH = '#16223a'
+const DITHER_K = NO_COMPOSER ? 1.45 : 1.15
 
-const AUREOLE = 0.12
 const FALLOFF = 0.006
 
 const TIER = {
-  low: { oct: 0, warp: 0, lights: 2 },
-  medium: { oct: 1, warp: 0, lights: 6 },
-  high: { oct: 2, warp: 1, lights: 6 },
-  ultra: { oct: 2, warp: 1, lights: 6 },
+  low: { oct: 0, warp: 0, lights: 2, bend: 0 },
+  medium: { oct: 1, warp: 0, lights: 6, bend: 0.04 },
+  high: { oct: 2, warp: 1, lights: 6, bend: 0.055 },
+  ultra: { oct: 2, warp: 1, lights: 6, bend: 0.062 },
 } as const
+
+const CALM = useStore.getState().reducedMotion
 
 interface Aureole {
   id: string
@@ -33,7 +34,6 @@ interface Aureole {
   own: number
 }
 
-/* The graph is static for the life of the page; so is this list. */
 const hot = new THREE.Color(site.meta.themeColorHot)
 const LIGHTS: Aureole[] = [...useStore.getState().graph.nodes.values()].map((n) => ({
   id: n.id,
@@ -66,18 +66,34 @@ export default function AetherDepths() {
     return new THREE.ShaderMaterial({
       vertexShader: depthsVert,
       fragmentShader: depthsFrag,
-      defines: { DEPTHS_OCT: tier.oct, DEPTHS_WARP: tier.warp, DEPTHS_LIGHTS: L },
+      defines: {
+        DEPTHS_OCT: tier.oct,
+        DEPTHS_WARP: tier.warp,
+        DEPTHS_LIGHTS: L,
+        DEPTHS_BEND: tier.bend > 0 ? 1 : 0,
+        PHONE_GRADE: NO_COMPOSER ? 1 : 0,
+        DITHER_K,
+      },
       uniforms: {
         uProjInv: { value: new THREE.Matrix4() },
         uViewInv: { value: new THREE.Matrix4() },
-        uNadir: { value: new THREE.Color(NADIR) },
-        uMid: { value: new THREE.Color(MID) },
-        uZenith: { value: new THREE.Color(ZENITH) },
+        uNadir: { value: DOME_STOPS.nadir },
+        uMid: { value: DOME_STOPS.mid },
+        uZenith: { value: DOME_STOPS.zenith },
         uVeilCold: { value: new THREE.Color(site.meta.themeColorCold) },
         uVeilMid: { value: new THREE.Color(site.meta.themeColorMid) },
         uTime: { value: 0 },
         uBreath: { value: 0.5 },
-        uEnvGain: { value: NO_COMPOSER ? 0.85 : 1 },
+        uDomeGain: { value: 1 },
+        uVeils: { value: LUM.veils },
+        uEnvAmbientClamp: { value: LUM.envAmbientClamp },
+        uEnvSourcedClamp: { value: LUM.envSourcedClamp },
+        uExposure: { value: 1 },
+        uAuroraDir: { value: new THREE.Vector3(0, 1, 0) },
+        uAuroraGain: { value: 0 },
+        uBendAmp: { value: tier.bend },
+        uBendT: { value: 40 },
+        uResolution: { value: new THREE.Vector2(1, 1) },
         uLightDir: { value: Array.from({ length: L }, () => new THREE.Vector3()) },
         uLightCol: { value: Array.from({ length: L }, () => new THREE.Color()) },
         uLightW: { value: new Array(L).fill(0) },
@@ -102,15 +118,22 @@ export default function AetherDepths() {
     ;(u.uViewInv.value as THREE.Matrix4).copy(cam.matrixWorld)
     u.uTime.value = t
     u.uBreath.value = breath(t)
+    u.uDomeGain.value = worldEvents.domeGain
+    u.uExposure.value = worldEvents.grade.exposure
+    ;(u.uAuroraDir.value as THREE.Vector3).copy(worldEvents.aurora.dir)
+    u.uAuroraGain.value = worldEvents.aurora.gain
+    u.uBendAmp.value = tier.bend * (1 + 0.9 * worldEvents.grade.caustic)
+    if (!CALM) u.uBendT.value = t
+    state.gl.getDrawingBufferSize(u.uResolution.value as THREE.Vector2)
 
     const goalId = s.phase === 'turn' ? (s.pendingId ?? s.currentId) : s.currentId
     for (const l of LIGHTS) {
       const dist = cam.position.distanceTo(l.pos)
       l.dir.copy(l.pos).sub(cam.position).normalize()
-      const target =
-        l.id === goalId ? 0.4 + 0.6 * Math.sin(travelProgress(s) * Math.PI) : 1
+      let target = l.id === goalId ? 1.25 + 0.75 * Math.sin(travelProgress(s) * Math.PI) : 1
+      if (l.id === worldEvents.flare.id) target *= 1 + 0.5 * worldEvents.flare.gain
       l.own += (target - l.own) * k
-      l.w = AUREOLE * Math.exp(-dist * FALLOFF) * l.own
+      l.w = LUM.aureole * Math.exp(-dist * FALLOFF) * l.own
     }
     LIGHTS.sort((a, b) => b.w - a.w)
 

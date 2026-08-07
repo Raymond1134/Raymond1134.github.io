@@ -1,7 +1,13 @@
 import CameraRig from './CameraRig'
+import AudioFrameSync from '@/audio/AudioFrameSync'
+import OvertureDirector from './OvertureDirector'
+import EventDirector from './EventDirector'
 import AetherDepths from './AetherDepths'
+import GreatVault from './GreatVault'
+import LensFlare from './LensFlare'
+import DeepLayer from './DeepLayer'
 import ParticleField from './ParticleField'
-import Ribbons from './Ribbons'
+import Loom from './Loom'
 import Beacons from './beacons/Beacons'
 import HoloPanel from './ui3d/HoloPanel'
 import Veil from './Veil'
@@ -11,17 +17,18 @@ export default function Scene() {
   return (
     <>
       <CameraRig />
-      {/* Right after the rig: its useFrame must read the camera pose set
-          this frame. */}
+      <AudioFrameSync />
+      <OvertureDirector />
+      <EventDirector />
       <AetherDepths />
+      <GreatVault />
+      <DeepLayer />
       <ParticleField />
-      <Ribbons />
+      <Loom />
       <Beacons />
       <HoloPanel />
-      {/* Last: useFrame runs priority-0 callbacks in mount order, and the veil
-          has to pin itself to the camera position CameraRig set this frame. */}
+      <LensFlare />
       <Veil />
-      {/* The composer owns tone mapping — gl.toneMapping stays NoToneMapping. */}
       <Post />
     </>
   )

@@ -4,16 +4,22 @@
     <meta charset="UTF-8" />
     <meta
       name="viewport"
-      content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover"
+      content="width=device-width, initial-scale=1, viewport-fit=cover"
     />
     <meta name="theme-color" content="#03040a" />
     <meta name="color-scheme" content="dark" />
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <title>Raymond Zheng</title>
   </head>
   <body>
+    <div
+      id="overture-shroud"
+      style="position: fixed; inset: 0; z-index: 60; background: #03040a; opacity: 1; transition: opacity 0.9s ease; pointer-events: none"
+    ></div>
+    <noscript><style>#overture-shroud { display: none; }</style></noscript>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>

@@ -1,12 +1,12 @@
 import { z } from 'zod'
 
-export const LinkSchema = z.object({
+const LinkSchema = z.object({
   label: z.string(),
   url: z.string(),
-  icon: z.enum(['github', 'linkedin', 'mail', 'external', 'doc', 'play']).optional(),
+  icon: z.enum(['github', 'linkedin', 'mail', 'phone', 'external', 'doc', 'play']).optional(),
 })
 
-export const MediaSchema = z.object({
+const MediaSchema = z.object({
   type: z.enum(['image', 'video']),
   src: z.string(),
   poster: z.string().optional(),
@@ -14,7 +14,7 @@ export const MediaSchema = z.object({
   caption: z.string().optional(),
 })
 
-export const BeaconSchema = z.object({
+const BeaconSchema = z.object({
   id: z.string().regex(/^[a-z0-9-]+$/, 'ids must be kebab-case: they become URLs'),
   title: z.string(),
   subtitle: z.string().optional(),
@@ -27,7 +27,6 @@ export const BeaconSchema = z.object({
   color: z.string().regex(/^#[0-9a-fA-F]{6}$/).optional(),
   position: z.tuple([z.number(), z.number(), z.number()]).optional(),
 
-  /* Multiplies the auto-layout radial distance from the graph centre. */
   spread: z.number().default(1),
 
   hidden: z.boolean().default(false),
@@ -40,22 +39,15 @@ export const SiteSchema = z.object({
     description: z.string(),
     url: z.string(),
     ogImage: z.string().optional(),
-    themeColorCold: z.string().default('#2b5cc4'),
-    themeColorMid: z.string().default('#7d5fd8'),
-    themeColorHot: z.string().default('#e07ab5'),
+    themeColorCold: z.string().default('#2d6fd8'),
+    themeColorMid: z.string().default('#8a5ce6'),
+    themeColorHot: z.string().default('#ef7ec7'),
     themeColorAccent: z.string().default('#fff2fa'),
   }),
-  audio: z.object({
-    ambient: z.string().optional(),
-    travel: z.string().optional(),
-    hover: z.string().optional(),
-    enabledByDefault: z.boolean().default(false),
-  }).default({ enabledByDefault: false }),
   root: z.string(),
   beacons: z.array(BeaconSchema),
 })
 
-export type Link = z.infer<typeof LinkSchema>
 export type Media = z.infer<typeof MediaSchema>
 export type Beacon = z.infer<typeof BeaconSchema>
 export type Site = z.infer<typeof SiteSchema>

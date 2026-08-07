@@ -2,12 +2,12 @@
   "meta": {
     "name": "Raymond Zheng",
     "role": "Computer Science Student",
-    "description": "Placeholder description.",
+    "description": "Computer science student at the University of Waterloo. I build deep learning frameworks from scratch, real-time physics engines, and systems that hold up under thirty thousand players.",
     "url": "https://raymond1134.github.io",
 
-    "themeColorCold": "#2b5cc4",
-    "themeColorMid": "#7d5fd8",
-    "themeColorHot": "#e07ab5",
+    "themeColorCold": "#2d6fd8",
+    "themeColorMid": "#8a5ce6",
+    "themeColorHot": "#ef7ec7",
     "themeColorAccent": "#fff2fa"
   },
   "root": "nexus",
@@ -15,36 +15,143 @@
     {
       "id": "nexus",
       "title": "Raymond Zheng",
-      "subtitle": "Computer Science Student",
-      "body": "Welcome. Pick a light.",
-      "children": ["about", "projects", "contact"]
+      "subtitle": "Computer Science · University of Waterloo",
+      "color": "#ffe2b8",
+      "body": "I build things from the bottom up — a deep learning framework with its own autograd and GPU kernels, a physics engine with its own collision solver, a Minecraft world that thirty thousand people played.\n\nEvery light here is somewhere I've been. Pick one.",
+      "links": [
+        { "label": "GitHub", "url": "https://github.com/Raymond1134", "icon": "github" },
+        { "label": "LinkedIn", "url": "https://linkedin.com/in/zraymond", "icon": "linkedin" }
+      ],
+      "children": ["work", "projects", "about", "contact"]
+    },
+
+    {
+      "id": "work",
+      "title": "Work",
+      "subtitle": "Where I've shipped",
+      "color": "#ffb361",
+      "body": "Ministry servers, an AI video startup, a campus committee, a coding school I founded, and a restaurant floor on a Friday night. Different rooms, same job: keep the thing running and leave it better.",
+      "children": ["viewmax", "ontario", "wcsc", "bytequest", "china-china-palace"]
     },
     {
-      "id": "about",
-      "title": "About",
-      "body": "Placeholder about text."
+      "id": "viewmax",
+      "title": "Viewmax",
+      "subtitle": "AI video generation",
+      "color": "#ffd166",
+      "body": "Working at Viewmax, an AI video generation company.",
+      "tags": ["AI video", "generative models"],
+      "related": ["nimbleml"]
     },
+    {
+      "id": "ontario",
+      "title": "Government of Ontario",
+      "subtitle": "Systems Support Officer · Toronto · ongoing",
+      "color": "#ff9448",
+      "body": "Technical support for ministry staff — diagnosing and resolving hardware, software, and network issues across the floor.\n\nDiagnosed and repaired enterprise server backup systems, improving the workflow of LTO tape-based backups.",
+      "tags": ["enterprise support", "networking", "backup systems"]
+    },
+    {
+      "id": "wcsc",
+      "title": "Waterloo CS Committee",
+      "subtitle": "Event Coordinator · Waterloo · 2026",
+      "color": "#ffcf9e",
+      "body": "Event coordinator for the **Waterloo Computer Science Committee**. Administered a recruitment event with an industry partner (ZIP), managing budgeting and attendee flow.\n\nSupported planning and execution of multiple events, including membership operations — registrations, payments, and record tracking.",
+      "tags": ["events", "operations", "budgeting"]
+    },
+    {
+      "id": "bytequest",
+      "title": "ByteQuest Academy",
+      "subtitle": "Founder · Mississauga · 2024",
+      "color": "#ffab3f",
+      "body": "Founded a ten-week coding program, managing curriculum design and instruction for fifteen students and volunteers.\n\nDesigned and delivered introductory Scratch and Python courses to improve youth access to STEM education, built around computational thinking and projects the students actually wanted to finish.",
+      "tags": ["teaching", "curriculum", "Python", "Scratch"]
+    },
+    {
+      "id": "china-china-palace",
+      "title": "China China Palace",
+      "subtitle": "Storefront Manager · Mississauga · 2024",
+      "color": "#ff8b4d",
+      "body": "Supervised and coordinated team members through peak hours to keep service quality up when the room was full.\n\nRan front-of-house operations and daily closing procedures, handling customer issues and conflict resolution.",
+      "tags": ["operations", "team lead"]
+    },
+
     {
       "id": "projects",
       "title": "Projects",
-      "children": ["project-one", "project-two"]
+      "subtitle": "Built from scratch",
+      "color": "#ff9272",
+      "body": "The through-line is *from scratch*: an autograd engine, a collision solver, a gameplay system with thirty thousand players in it. I'd rather understand the layer below than call into it.",
+      "children": ["nimbleml", "kinematica", "post-it", "mhdungeon"]
     },
     {
-      "id": "project-one",
-      "title": "Project One",
-      "body": "Placeholder 1."
+      "id": "nimbleml",
+      "title": "NimbleML",
+      "subtitle": "A deep learning framework · ongoing",
+      "color": "#ff8fae",
+      "body": "A lightweight deep learning framework written from scratch — over forty neural network modules, automatic differentiation, GPU acceleration, and transformer architectures.\n\nOn top of it, a high-performance GPT with BPE tokenization, tuned through fused kernels, flash attention, and mixed CPU/GPU execution.",
+      "tags": ["Python", "C++", "NumPy", "CuPy", "autograd", "transformers", "CUDA"],
+      "related": ["skills"]
     },
     {
-      "id": "project-two",
-      "title": "Project Two",
-      "body": "Placeholder 2."
+      "id": "kinematica",
+      "title": "Kinematica",
+      "subtitle": "Real-time 3D physics engine · 2025",
+      "color": "#a3bdf7",
+      "body": "A real-time 3D physics engine supporting soft-body and rigid-body interaction, with GJK-based collision detection for arbitrary meshes and custom solvers.\n\nIt ships with a tool for creating and configuring physics bodies through a material loading system, so a developer can prototype complex mechanics without touching the solver.",
+      "tags": ["C++", "C", "raylib", "computational geometry", "GJK", "soft body"]
     },
+    {
+      "id": "post-it",
+      "title": "Post-It",
+      "subtitle": "AR lens for Snapchat Spectacles · 2025",
+      "color": "#ff7a58",
+      "body": "An augmented reality lens built with Snap3D, driven entirely by hand gestures on Snapchat Spectacles.\n\nTop 32 overall out of more than a thousand participants at **Hack the North 2025**.",
+      "tags": ["Snap3D", "TypeScript", "AR", "gesture input"]
+    },
+    {
+      "id": "mhdungeon",
+      "title": "MHDungeon",
+      "subtitle": "A Minecraft world, 30,000 players · 2025",
+      "color": "#d49bf7",
+      "body": "A large-scale Minecraft server with custom gameplay systems written in Skript against the Bukkit API — dungeon generation, enemy scaling, parties, path-finding, bosses, and reward pipelines.\n\nScaled the infrastructure past **30,000 unique players**, resolving production issues and shipping new content live. I also ran the marketing, community outreach, and monetization, which cleared **$8,000** in profit.",
+      "tags": ["Skript", "Bukkit API", "live ops", "game design", "community"]
+    },
+
+    {
+      "id": "about",
+      "title": "About",
+      "subtitle": "The short version",
+      "color": "#ffd98f",
+      "body": "I'm a computer science student at the University of Waterloo, in the co-op program. Most of what I know came from rebuilding a thing I'd used until I understood why it worked.\n\nRight now that's machine learning systems: kernels, autograd, attention — the parts underneath the framework.",
+      "children": ["education", "skills"]
+    },
+    {
+      "id": "education",
+      "title": "Education",
+      "color": "#f2ca6e",
+      "body": "**University of Waterloo** — Bachelor of Computer Science (BCS), Co-operative Program. Sep 2025 – Jun 2030, Waterloo, ON.\n\n**Google** — Data Analytics Professional Certificate. Jan 2024 – Jun 2024.",
+      "tags": ["Waterloo BCS", "co-op"]
+    },
+    {
+      "id": "skills",
+      "title": "Skills",
+      "subtitle": "What I reach for",
+      "color": "#a9e8dc",
+      "body": "**Languages** — Python, C++, C#, TypeScript, JavaScript, HTML/CSS, Racket, Skript.\n\n**Machine learning** — PyTorch, TensorFlow, NumPy, CuPy, OpenCV, autograd, transformer architectures.\n\n**Data** — Pandas, Matplotlib, SQL, MongoDB, data processing, augmentation, dataset analysis.\n\n**Also** — React Native, Flask, Expo, .NET, raylib, OpenMP, GPU programming, computational geometry, real-time systems.",
+      "tags": ["deep learning", "NLP", "computer vision", "LLMs", "GPU programming"]
+    },
+
     {
       "id": "contact",
       "title": "Contact",
+      "subtitle": "Say hello",
+      "color": "#ffb894",
+      "body": "I'm looking for co-op terms in machine learning, systems, and graphics. The fastest way to reach me is email.",
       "links": [
-        { "label": "GitHub", "url": "https://github.com/Raymond1134", "icon": "github" },
-        { "label": "Email", "url": "mailto:raymondzheng2000@gmail.com", "icon": "mail" }
+        { "label": "Email", "url": "mailto:raymond.zheng1@uwaterloo.ca", "icon": "mail" },
+        { "label": "437-986-6118", "url": "tel:+14379866118", "icon": "phone" },
+        { "label": "LinkedIn", "url": "https://linkedin.com/in/zraymond", "icon": "linkedin" },
+        { "label": "GitHub", "url": "https://github.com/Raymond1134", "icon": "github" }
       ]
     }
   ]

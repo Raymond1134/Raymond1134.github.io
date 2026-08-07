@@ -18,11 +18,9 @@ zustand · TypeScript · Vite
 ```bash
 npm install
 npm run dev       # serves on the LAN too (--host), for phone testing
-npm run build     # tsc -b && vite build
+npm run build     # flash audit + tsc + vite build + prerender
 npm run lint
 ```
-
-The build plan, phase by phase, lives in [`notes/plan.md`](notes/plan.md).
 
 ## Credits
 

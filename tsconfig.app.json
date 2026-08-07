@@ -8,12 +8,8 @@
     "allowArbitraryExtensions": true,
     "skipLibCheck": true,
 
-    /* Mirrors resolve.alias in vite.config.ts so `@/...` imports type-check.
-       No `baseUrl` — it's deprecated in TS 6; `paths` now resolves relative
-       to this file's directory. */
     "paths": { "@/*": ["./src/*"] },
 
-    /* Bundler mode */
     "moduleResolution": "bundler",
     "allowImportingTsExtensions": true,
     "verbatimModuleSyntax": true,
@@ -21,10 +17,8 @@
     "noEmit": true,
     "jsx": "react-jsx",
 
-    /* Lets `src/content/index.ts` do `import raw from './site.json'`. */
     "resolveJsonModule": true,
 
-    /* Linting */
     "strict": true,
     "noUnusedLocals": true,
     "noUnusedParameters": true,
