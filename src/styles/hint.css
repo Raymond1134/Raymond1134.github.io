@@ -5,21 +5,22 @@
   bottom: calc(var(--sab) + 88px);
   transform: translateX(-50%);
 
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 10px;
-
   margin: 0;
-  padding: 12px 18px 11px;
-  max-width: min(92vw, 460px);
+  padding: 11px 22px;
+  max-width: min(92vw, 680px);
   text-align: center;
 
   background: rgba(9, 14, 28, 0.5);
-  border: 1px solid rgba(223, 233, 255, 0.14);
-  border-radius: 14px;
+  border: 1px solid rgba(207, 224, 247, 0.2);
+  border-radius: 999px;
   backdrop-filter: blur(12px) saturate(1.2);
   -webkit-backdrop-filter: blur(12px) saturate(1.2);
+
+  font-size: 13px;
+  line-height: 1.6;
+  letter-spacing: 0.02em;
+  color: var(--ink);
+  text-shadow: 0 1px 3px rgba(3, 4, 10, 0.95);
 
   pointer-events: none;
   opacity: 0.92;
@@ -28,38 +29,10 @@
 
 .hint-text {
   margin: 0;
-  font-size: 13px;
-  letter-spacing: 0.05em;
-  color: var(--ink);
-  text-shadow: 0 1px 3px rgba(3, 4, 10, 0.95);
 }
 
-.hint-glyph {
-  position: relative;
-  width: 52px;
-  height: 20px;
-  border: 1px solid rgba(223, 233, 255, 0.28);
-  border-radius: 999px;
-}
-
-.hint-glyph::before {
-  content: '';
-  position: absolute;
-  top: 50%;
-  left: 7px;
-  width: 8px;
-  height: 8px;
-  margin-top: -4px;
-  border-radius: 50%;
-  background: var(--ink);
-  box-shadow: 0 0 10px rgba(223, 233, 255, 0.75);
-  animation: hint-drag 2.8s ease-in-out infinite;
-}
-
-@keyframes hint-drag {
-  0%, 12% { transform: translateX(0); }
-  46%, 62% { transform: translateX(30px); }
-  96%, 100% { transform: translateX(0); }
+.hint-seg {
+  white-space: nowrap;
 }
 
 @keyframes hint-in {
@@ -76,6 +49,7 @@
 @media (pointer: coarse) and (max-width: 600px), (pointer: coarse) and (max-height: 600px) {
   .hint {
     bottom: calc(var(--sab) + 108px);
+    border-radius: 26px;
   }
 }
 
@@ -84,10 +58,5 @@
   .hint[data-hide='true'] {
     animation: none;
     transition: none;
-  }
-
-  .hint-glyph::before {
-    animation: none;
-    transform: translateX(15px);
   }
 }

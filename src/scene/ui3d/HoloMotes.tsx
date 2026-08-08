@@ -3,9 +3,8 @@ import { useFrame } from '@react-three/fiber'
 import * as THREE from 'three'
 import motesVert from '@/shaders/holo/motes.vert'
 import motesFrag from '@/shaders/holo/motes.frag'
-import { PANEL_Z, PANEL_LIFT } from './panelLayout'
 
-const COUNT = 640
+const COUNT = 160
 const COOL = '#bcd9ff'
 
 interface Props {
@@ -35,7 +34,6 @@ function buildAssets(): MoteAssets {
       uTime: { value: 0 },
       uOpacity: { value: 0 },
       uSize: { value: new THREE.Vector2(30, 17) },
-      uAnchor: { value: new THREE.Vector3() },
       uPixelRatio: { value: Math.min(window.devicePixelRatio, 2) },
       uColor: { value: new THREE.Color('#ffffff') },
       uCool: { value: new THREE.Color(COOL) },
@@ -76,12 +74,11 @@ export default function HoloMotes({ width, height, accent, fadeRef }: Props) {
     u.uTime.value = state.clock.elapsedTime
     u.uOpacity.value = fade
     ;(u.uSize.value as THREE.Vector2).set(width, height)
-    ;(u.uAnchor.value as THREE.Vector3).set(0, -height * PANEL_LIFT, -PANEL_Z)
     ;(u.uColor.value as THREE.Color).copy(accent)
     u.uPixelRatio.value = state.gl.getPixelRatio()
   })
 
   if (!assets) return null
 
-  return <points ref={points} geometry={assets.geo} material={assets.mat} frustumCulled={false} />
+  return <points ref={points} geometry={assets.geo} material={assets.mat} renderOrder={3} frustumCulled={false} />
 }

@@ -44,6 +44,12 @@ float gradCh(float y, float nadir, float mid, float zenith) {
   return mix(mix(nadir, mid, smoothstep(-0.75, 0.22, y)), zenith, smoothstep(0.10, 0.90, y));
 }
 
+vec3 softClamp(vec3 c, float k) {
+  float kn = k * 0.65;
+  float soft = k * 0.35;
+  return min(c, kn + soft * (1.0 - exp(-max(c - kn, vec3(0.0)) / soft)));
+}
+
 void main() {
   vec3 d = normalize(vDir);
 
@@ -97,7 +103,7 @@ void main() {
 
   col *= (0.92 + 0.08 * uBreath) * uDomeGain;
 
-  col = min(col, vec3(uEnvAmbientClamp));
+  col = softClamp(col, uEnvAmbientClamp);
 
   for (int i = 0; i < DEPTHS_LIGHTS; i++) {
     vec3 stain = uLightCol[i] * uLightW[i];
@@ -107,7 +113,7 @@ void main() {
       pow(max(dot(aB, uLightDir[i]), 0.0), 24.0));
   }
 
-  col = min(col, vec3(uEnvSourcedClamp));
+  col = softClamp(col, uEnvSourcedClamp);
 
   col = bandBreak3(col, gl_FragCoord.xy, 0.0, DITHER_K);
 

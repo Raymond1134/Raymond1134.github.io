@@ -51,6 +51,7 @@ export default function App() {
   const [dpr, setDpr] = useState(dprCap)
   const dprRef = useRef(dpr)
   const declinedAt = useRef(0)
+  const bootTier = useRef<Quality>('high')
   useEffect(() => {
     dprRef.current = dpr
   }, [dpr])
@@ -91,6 +92,7 @@ export default function App() {
             if (discrete && cores >= 8) s.setQuality('ultra')
             else if (software || cores <= 4) s.setQuality('medium')
           }
+          bootTier.current = useStore.getState().quality
         }}
       >
         <Suspense fallback={null}>
@@ -115,6 +117,11 @@ export default function App() {
           onIncline={() => {
             if (performance.now() - declinedAt.current < 30_000) return
             const s = useStore.getState()
+            const i = TIERS.indexOf(s.quality)
+            if (i < TIERS.indexOf(bootTier.current)) {
+              s.setQuality(TIERS[i + 1])
+              return
+            }
             if (s.fx !== 'full') {
               s.setFx(s.fx === 'off' ? 'reduced' : 'full')
               return

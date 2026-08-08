@@ -5,6 +5,10 @@ import '@/styles/shortcuts.css'
 const TOGGLE = 'aether:shortcuts'
 
 const KEYS: [string, string][] = [
+  ['Click', 'a nearby named light — travel to it'],
+  ['Drag', 'look around'],
+  ['Right drag', 'circle the light you are at'],
+  ['Scroll', 'draw closer, or drift back'],
   ['Esc', 'up a level'],
   ['M', 'the weave'],
   ['0', 'recentre the view'],
@@ -14,6 +18,7 @@ const KEYS: [string, string][] = [
 const GESTURES: [string, string][] = [
   ['Swipe up', 'from the bottom edge, the weave'],
   ['Drag', 'look around'],
+  ['Two-finger drag', 'circle the light you are at'],
   ['Pinch', 'draw closer, or drift back'],
   ['Tap a light', 'travel to it'],
 ]

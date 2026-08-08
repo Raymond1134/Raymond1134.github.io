@@ -34,7 +34,8 @@ void main() {
   float dist = max(-mv.z, 0.001);
   vDepth = dist;
 
-  float px = min(1.5 * uPixelRatio * (130.0 / dist), 4.5 * uPixelRatio);
+  float near = 1.0 - smoothstep(20.0, 180.0, dist);
+  float px = min(1.5 * uPixelRatio * (130.0 / dist), (4.5 + 2.5 * near) * uPixelRatio);
   float size = max(px, 1.5 * uPixelRatio);
   gl_PointSize = size;
   float tiny = min(1.0, (px * px) / (size * size));
@@ -58,6 +59,7 @@ void main() {
   vEnd = smoothstep(2.5, 9.0, aAlong * aLen)
        * smoothstep(2.5, 9.0, (1.0 - aAlong) * aLen)
        * smoothstep(8.0, 22.0, dist)
+       * (1.0 - 0.45 * smoothstep(80.0, 280.0, dist))
        * tiny * reveal;
 
   vCol = aCol;

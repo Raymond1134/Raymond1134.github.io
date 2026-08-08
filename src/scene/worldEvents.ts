@@ -23,6 +23,8 @@ export const worldEvents = {
 
   panelGate: 1,
 
+  panelDim: 0,
+
   skipOverture: false,
 
   flare: { id: null as string | null, gain: 0 },

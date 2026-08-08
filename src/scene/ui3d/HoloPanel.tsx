@@ -23,17 +23,15 @@ import '@/styles/holo.css'
 const HTML_DISTANCE = 12
 const HTML_PX_TO_WORLD = HTML_DISTANCE / 400
 
-const LOOK_FADE_START = 0.35
-const LOOK_FADE_END = 1.1
+const LOOK_FADE_START = 0.6
+const LOOK_FADE_END = 1.4
+
+const GLOW_PAD_W = 20
+const GLOW_PAD_H = 14
 
 const HOVER_DIM = 0.55
 
-const FACE_DAMP = 0.001
-
-const tmpM = new THREE.Matrix4()
-const faceQuat = new THREE.Quaternion()
 const proj = new THREE.Vector3()
-const WORLD_UP = new THREE.Vector3(0, 1, 0)
 
 const STAGGER = { plate: 0, title: 0.18, subtitle: 0.3, motes: 0.38, body: 0.5, media: 0.6 } as const
 const WINDOW = 0.42
@@ -140,6 +138,7 @@ export default function HoloPanel() {
     const lambda = rising ? LAMBDA.quick : s.phase === 'idle' ? LAMBDA.ease : LAMBDA.quick
     const fade = THREE.MathUtils.damp(fadeRef.current, target, lambda, dt)
     fadeRef.current = fade
+    worldEvents.panelDim = fade
 
     const ef = (offset: number) => THREE.MathUtils.smoothstep(fade, offset, offset + WINDOW)
     moteFade.current = ef(STAGGER.motes)
@@ -151,12 +150,7 @@ export default function HoloPanel() {
     if (shouldHtml !== htmlLive) setHtmlLive(shouldHtml)
 
     const g = groupRef.current
-    if (g) {
-      tmpM.lookAt(state.camera.position, node.worldPosition, WORLD_UP)
-      faceQuat.setFromRotationMatrix(tmpM)
-      if (fade < 0.02) g.quaternion.copy(faceQuat)
-      else g.quaternion.slerp(faceQuat, 1 - Math.pow(FACE_DAMP, dt))
-    }
+    if (g) g.quaternion.copy(state.camera.quaternion)
 
     const mat = materialRef.current
     if (mat) {
@@ -165,12 +159,12 @@ export default function HoloPanel() {
       mat.uniforms.uExposure.value = worldEvents.grade.exposure
       mat.uniforms.uOpacity.value = fade
       ;(mat.uniforms.uColor.value as THREE.Color).copy(accentColor)
-      ;(mat.uniforms.uSize.value as THREE.Vector2).set(PANEL_W, PANEL_H)
+      ;(mat.uniforms.uSize.value as THREE.Vector2).set(PANEL_W + GLOW_PAD_W, PANEL_H + GLOW_PAD_H)
     }
     const smoke = smokeRef.current
     if (smoke) {
       smoke.uniforms.uOpacity.value = 0.85 * fade
-      ;(smoke.uniforms.uSize.value as THREE.Vector2).set(PANEL_W, PANEL_H)
+      ;(smoke.uniforms.uSize.value as THREE.Vector2).set(PANEL_W + GLOW_PAD_W, PANEL_H + GLOW_PAD_H)
     }
 
     const efTitle = ef(STAGGER.title)
@@ -178,14 +172,14 @@ export default function HoloPanel() {
       const t = titleRef.current as unknown as TroikaText
       t.fillOpacity = efTitle
       t.outlineOpacity = efTitle * 0.7
-      titleRef.current.position.y = PANEL_H / 2 - 2.2 * scale - (1 - efTitle) * 0.4
+      titleRef.current.position.y = PANEL_H / 2 - 2.3 * scale - (1 - efTitle) * 0.4
     }
     const efSub = ef(STAGGER.subtitle)
     if (subRef.current) {
       const t = subRef.current as unknown as TroikaText
       t.fillOpacity = efSub * 0.85
       t.outlineOpacity = efSub * 0.55
-      subRef.current.position.y = PANEL_H / 2 - 4.5 * scale - (1 - efSub) * 0.4
+      subRef.current.position.y = PANEL_H / 2 - 4.7 * scale - (1 - efSub) * 0.4
     }
 
     const el = htmlRef.current
@@ -197,24 +191,27 @@ export default function HoloPanel() {
 
   if (!live) return null
 
-  const titleSize = Math.min(2.1 * scale, (PANEL_W - 2.8 * scale) / (node.title.length * 0.57))
+  const titleSize = Math.min(2.45 * scale, (PANEL_W - 4.4 * scale) / (node.title.length * 0.57))
+  const subSize = node.subtitle
+    ? Math.min(1.15 * scale, (PANEL_W - 4.4 * scale) / (node.subtitle.length * 0.58))
+    : 0
 
-  const htmlPx = Math.round(520 * scale)
+  const htmlPx = Math.round(560 * scale)
   const htmlWorldW = htmlPx * HTML_PX_TO_WORLD
-  const htmlX = -PANEL_W / 2 + 1.4 * scale + htmlWorldW / 2
+  const htmlX = -PANEL_W / 2 + 2.2 * scale + htmlWorldW / 2
 
   return (
     <group ref={groupRef} position={node.worldPosition}>
       <group position={[0, PANEL_H * PANEL_LIFT, PANEL_Z]}>
         {mats && (
           <mesh material={mats.smoke} position={[0, 0, -0.06]} renderOrder={1}>
-            <planeGeometry args={[PANEL_W, PANEL_H]} />
+            <planeGeometry args={[PANEL_W + GLOW_PAD_W, PANEL_H + GLOW_PAD_H]} />
           </mesh>
         )}
 
         {mats && (
           <mesh material={mats.plate} renderOrder={2}>
-            <planeGeometry args={[PANEL_W, PANEL_H]} />
+            <planeGeometry args={[PANEL_W + GLOW_PAD_W, PANEL_H + GLOW_PAD_H]} />
           </mesh>
         )}
 
@@ -222,17 +219,17 @@ export default function HoloPanel() {
 
         <Text
           ref={titleRef}
-          position={[-PANEL_W / 2 + 1.4 * scale, PANEL_H / 2 - 2.2 * scale, 0.05]}
+          position={[-PANEL_W / 2 + 2.2 * scale, PANEL_H / 2 - 2.3 * scale, 0.05]}
           renderOrder={3}
           anchorX="left"
           anchorY="middle"
           fontSize={titleSize}
-          maxWidth={PANEL_W - 2.8 * scale}
+          maxWidth={PANEL_W - 4.4 * scale}
           letterSpacing={0.045}
           color={accent}
           material-toneMapped={false}
           fillOpacity={0}
-          outlineWidth={0}
+          outlineWidth="6%"
           outlineBlur="16%"
           outlineColor="#04060f"
           outlineOpacity={0}
@@ -244,17 +241,17 @@ export default function HoloPanel() {
         {node.subtitle && (
           <Text
             ref={subRef}
-            position={[-PANEL_W / 2 + 1.4 * scale, PANEL_H / 2 - 4.5 * scale, 0.05]}
+            position={[-PANEL_W / 2 + 2.2 * scale, PANEL_H / 2 - 4.7 * scale, 0.05]}
             renderOrder={3}
             anchorX="left"
             anchorY="middle"
-            fontSize={0.95 * scale}
-            maxWidth={PANEL_W - 2.8 * scale}
+            fontSize={subSize}
+            maxWidth={PANEL_W - 4.4 * scale}
             letterSpacing={0.08}
             color="#a9bedd"
             material-toneMapped={false}
             fillOpacity={0}
-            outlineWidth={0}
+            outlineWidth="6%"
             outlineBlur="18%"
             outlineColor="#04060f"
             outlineOpacity={0}
@@ -269,7 +266,7 @@ export default function HoloPanel() {
             transform
             occlude={false}
             distanceFactor={HTML_DISTANCE}
-            position={[htmlX, -PANEL_H * 0.08, 0.05]}
+            position={[htmlX, -PANEL_H * 0.15, 0.05]}
             zIndexRange={[20, 0]}
             style={{ width: `${htmlPx}px` }}
             wrapperClass="holo-html"

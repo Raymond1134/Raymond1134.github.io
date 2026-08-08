@@ -16,11 +16,15 @@ const coarse = isCoarsePointer()
 export const input = {
   look: { yaw: 0, pitch: 0 },
 
+  orbit: { yaw: 0, pitch: 0 },
+
   dolly: 0,
 
   dragDistance: 0,
 
   dragging: false,
+
+  orbiting: false,
 
   pointer: { x: 0, y: 0, active: false, speed: 0, movedAt: 0 },
 
@@ -31,6 +35,7 @@ interface Tracked {
   id: number
   x: number
   y: number
+  orbit: boolean
 }
 
 const active = new Map<number, Tracked>()
@@ -53,9 +58,10 @@ export const stillFor = () =>
 
 export function attachInput(el: HTMLElement): () => void {
   const onDown = (e: PointerEvent) => {
-    active.set(e.pointerId, { id: e.pointerId, x: e.clientX, y: e.clientY })
+    active.set(e.pointerId, { id: e.pointerId, x: e.clientX, y: e.clientY, orbit: e.button === 2 })
     el.setPointerCapture?.(e.pointerId)
     recentring.on = false
+    input.orbiting = active.size >= 2 || [...active.values()].some((t) => t.orbit)
 
     if (active.size === 1) {
       startX = e.clientX
@@ -88,7 +94,7 @@ export function attachInput(el: HTMLElement): () => void {
 
     const dx = e.clientX - prev.x
     const dy = e.clientY - prev.y
-    active.set(e.pointerId, { id: e.pointerId, x: e.clientX, y: e.clientY })
+    active.set(e.pointerId, { id: e.pointerId, x: e.clientX, y: e.clientY, orbit: prev.orbit })
     input.dragDistance = Math.hypot(e.clientX - startX, e.clientY - startY)
     lastInteraction = now
     recentring.on = false
@@ -97,6 +103,14 @@ export function attachInput(el: HTMLElement): () => void {
       const [a, b] = [...active.values()]
       const d = gap(a, b)
       if (pinchStart > 0) input.dolly = clamp(dollyStart + (d - pinchStart) * 0.06 * dollySign, -14, 16)
+      input.orbit.yaw -= dx * 0.5 * lookScale
+      input.orbit.pitch = clamp(input.orbit.pitch + dy * 0.5 * lookScale, -1, 1)
+      return
+    }
+
+    if (prev.orbit) {
+      input.orbit.yaw -= dx * lookScale
+      input.orbit.pitch = clamp(input.orbit.pitch + dy * lookScale, -1, 1)
       return
     }
 
@@ -107,6 +121,7 @@ export function attachInput(el: HTMLElement): () => void {
   const onUp = (e: PointerEvent) => {
     active.delete(e.pointerId)
     el.releasePointerCapture?.(e.pointerId)
+    input.orbiting = active.size >= 2 || [...active.values()].some((t) => t.orbit)
     if (active.size === 0) {
       input.dragging = false
       pinchStart = 0
@@ -129,6 +144,7 @@ export function attachInput(el: HTMLElement): () => void {
   const onDouble = () => recentre()
   const stopGesture = (e: Event) => e.preventDefault()
 
+  el.addEventListener('contextmenu', stopGesture)
   el.addEventListener('pointerdown', onDown)
   el.addEventListener('pointermove', onMove)
   el.addEventListener('pointerup', onUp)
@@ -140,6 +156,7 @@ export function attachInput(el: HTMLElement): () => void {
   el.addEventListener('gesturechange', stopGesture)
 
   return () => {
+    el.removeEventListener('contextmenu', stopGesture)
     el.removeEventListener('pointerdown', onDown)
     el.removeEventListener('pointermove', onMove)
     el.removeEventListener('pointerup', onUp)
@@ -222,17 +239,28 @@ const LOOK_RETURN_AFTER = 45
 const TWO_PI = Math.PI * 2
 
 export function settleInput(dt: number) {
+  if (input.orbiting) {
+    const k = 1 - Math.exp(-5 * dt)
+    const home = Math.round(input.look.yaw / TWO_PI) * TWO_PI
+    input.look.yaw += (home - input.look.yaw) * k
+    input.look.pitch -= input.look.pitch * k
+  }
   if (input.dragging) return
 
   if (recentring.on) {
     const k = 1 - Math.exp(-5 * dt)
     const home = Math.round(input.look.yaw / TWO_PI) * TWO_PI
+    const ohome = Math.round(input.orbit.yaw / TWO_PI) * TWO_PI
     input.look.yaw += (home - input.look.yaw) * k
     input.look.pitch -= input.look.pitch * k
+    input.orbit.yaw += (ohome - input.orbit.yaw) * k
+    input.orbit.pitch -= input.orbit.pitch * k
     input.dolly -= input.dolly * k
     if (
       Math.abs(input.look.yaw - home) < 0.002 &&
       Math.abs(input.look.pitch) < 0.002 &&
+      Math.abs(input.orbit.yaw - ohome) < 0.002 &&
+      Math.abs(input.orbit.pitch) < 0.002 &&
       Math.abs(input.dolly) < 0.02
     ) {
       recentring.on = false
@@ -243,11 +271,19 @@ export function settleInput(dt: number) {
   if (stillFor() < LOOK_RETURN_AFTER) return
   const k = 1 - Math.exp(-LAMBDA.tide * dt)
   const home = Math.round(input.look.yaw / TWO_PI) * TWO_PI
+  const ohome = Math.round(input.orbit.yaw / TWO_PI) * TWO_PI
   input.look.yaw += (home - input.look.yaw) * k
   input.look.pitch -= input.look.pitch * k
+  input.orbit.yaw += (ohome - input.orbit.yaw) * k
+  input.orbit.pitch -= input.orbit.pitch * k
 }
 
 export const lookOffset = () => {
   const yaw = input.look.yaw - Math.round(input.look.yaw / TWO_PI) * TWO_PI
   return Math.hypot(yaw, input.look.pitch)
+}
+
+export const awayOffset = () => {
+  const oyaw = input.orbit.yaw - Math.round(input.orbit.yaw / TWO_PI) * TWO_PI
+  return Math.hypot(lookOffset(), oyaw, input.orbit.pitch)
 }

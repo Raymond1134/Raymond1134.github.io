@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { Fragment, useEffect, useState } from 'react'
 import { useStore } from '@/state/store'
 import { input } from '@/input/input'
 import '@/styles/hint.css'
@@ -66,13 +66,19 @@ export default function FirstHint() {
 
   if (!mounted) return null
 
+  const segs = coarse
+    ? ['Drag to look around', 'Tap a nearby named light to travel', 'Swipe up for the map']
+    : ['Drag to look around', 'Click a nearby named light to travel', 'M opens the map']
+
   return (
     <div className="hint" data-hide={hiding} role="status">
-      <span className="hint-glyph" aria-hidden="true" />
       <p className="hint-text">
-        {coarse
-          ? 'Drag to look around · Tap a blue light to travel'
-          : 'Drag to look around · Click a blue light to travel'}
+        {segs.map((seg, i) => (
+          <Fragment key={seg}>
+            {i > 0 && ' · '}
+            <span className="hint-seg">{seg}</span>
+          </Fragment>
+        ))}
       </p>
     </div>
   )

@@ -79,8 +79,8 @@ void main() {
   float pulse = 0.75 + 0.25 * sin(pf.x * 0.010 - uTime * 0.16);
   floorCol += uAbyssCol * (uAbyssL * depthW * pulse * mistN * (0.8 + 0.2 * uBreath));
 
-  float rr = length(pf.xz - vec2(0.0, -170.0));
-  float azf = atan(pf.z + 170.0, pf.x);
+  float rr = length(pf.xz - ro.xz);
+  float azf = atan(pf.z - ro.z, pf.x - ro.x);
   vec2 azv = vec2(cos(azf), sin(azf)) * 2.1;
   float rn = snoise(vec3(azv, 4.2));
   float rim = exp(-abs(rr - HORIZON_R * (1.0 + 0.09 * rn)) / (26.0 + 18.0 * rn * rn)) * uHorizonL;

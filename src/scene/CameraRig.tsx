@@ -65,6 +65,9 @@ function anchorDistance(camera: THREE.PerspectiveCamera, panelWidth: number, pan
 }
 
 const RISE = 0.09
+const APPROACH_TILT = Math.sin(THREE.MathUtils.degToRad(20))
+const ORBIT_TILT = THREE.MathUtils.degToRad(30)
+const orbitAim = new THREE.Vector3()
 
 function anchorFor(out: THREE.Vector3, node: { worldPosition: THREE.Vector3 }, distance: number, approach: THREE.Vector3) {
   return out
@@ -76,7 +79,25 @@ function anchorFor(out: THREE.Vector3, node: { worldPosition: THREE.Vector3 }, d
 function approachTo(from: THREE.Vector3, node: GraphNode, distance: number, out: THREE.Vector3) {
   out.copy(from).addScaledVector(WORLD_UP, -distance * RISE).sub(node.worldPosition)
   if (out.lengthSq() < 1e-6) out.copy(node.outward).negate()
-  return out.normalize()
+  out.normalize()
+  if (Math.abs(out.y) > APPROACH_TILT) {
+    let hx = out.x
+    let hz = out.z
+    let h = Math.hypot(hx, hz)
+    if (h < 1e-4) {
+      hx = node.outward.x
+      hz = node.outward.z
+      h = Math.hypot(hx, hz)
+    }
+    if (h < 1e-4) {
+      hx = 0
+      hz = 1
+      h = 1
+    }
+    const k = Math.sqrt(1 - APPROACH_TILT * APPROACH_TILT) / h
+    out.set(hx * k, Math.sign(out.y) * APPROACH_TILT, hz * k)
+  }
+  return out
 }
 
 function applyFov(camera: THREE.PerspectiveCamera, fov: number, height: number) {
@@ -185,6 +206,8 @@ export default function CameraRig() {
 
       input.look.yaw = 0
       input.look.pitch = 0
+      input.orbit.yaw = 0
+      input.orbit.pitch = 0
 
       lookTarget.current.copy(dest)
       return
@@ -200,6 +223,8 @@ export default function CameraRig() {
       lookTarget.current.copy(current.worldPosition)
       input.look.yaw = 0
       input.look.pitch = 0
+      input.orbit.yaw = 0
+      input.orbit.pitch = 0
       applyLook(camera, lookTarget.current, 0, 0)
       return
     }
@@ -211,6 +236,8 @@ export default function CameraRig() {
         camera.position.copy(anchorFor(tmpB, current, dist, approach.current))
         input.look.yaw = 0
         input.look.pitch = 0
+        input.orbit.yaw = 0
+        input.orbit.pitch = 0
         lookTarget.current.copy(current.worldPosition)
         driftOff.current.set(0, 0, 0)
         fadeSnapped.current = true
@@ -229,7 +256,18 @@ export default function CameraRig() {
       approachId.current = current.id
     }
 
-    camera.position.lerp(anchorFor(tmpB, current, dist, approach.current), 1 - Math.pow(0.0015, dt))
+    let av = approach.current
+    const ob = input.orbit
+    if (ob.yaw !== 0 || ob.pitch !== 0) {
+      const byaw = Math.atan2(av.x, av.z)
+      const belev = Math.asin(THREE.MathUtils.clamp(av.y, -1, 1))
+      const elev = THREE.MathUtils.clamp(belev + ob.pitch, -ORBIT_TILT, ORBIT_TILT)
+      ob.pitch = elev - belev
+      const yaw = byaw + ob.yaw
+      av = orbitAim.set(Math.sin(yaw) * Math.cos(elev), Math.sin(elev), Math.cos(yaw) * Math.cos(elev))
+    }
+
+    camera.position.lerp(anchorFor(tmpB, current, dist, av), 1 - Math.pow(0.0015, dt))
     lookTarget.current.lerp(current.worldPosition, 1 - Math.pow(0.002, dt))
 
     const k = idleT.current

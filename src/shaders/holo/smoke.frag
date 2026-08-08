@@ -7,9 +7,13 @@ varying vec2 vUv;
 
 void main() {
   vec2 p = (vUv - 0.5) * uSize;
-  vec2 q = abs(p) - (uSize * 0.5 - 3.5 - 1.5);
-  float d = length(max(q, 0.0)) + min(max(q.x, q.y), 0.0) - 1.5;
-  float mask = 1.0 - smoothstep(-3.0, 1.0, d);
+  vec2 c = uSize * 0.5 - vec2(13.0, 10.0);
+  float r = min(c.x, c.y) * 0.5;
+  vec2 q = abs(p) - (c - r);
+  float d = length(max(q, 0.0)) + min(max(q.x, q.y), 0.0) - r;
+  vec2 m = uSize * 0.5 - abs(p);
+  float edgeFade = smoothstep(0.0, 3.0, min(m.x, m.y));
+  float mask = 0.94 * exp(-pow(max(d, 0.0) / 2.0, 1.6)) * edgeFade;
   gl_FragColor = vec4(vec3(0.0009, 0.0018, 0.0046), mask * uOpacity);
   #include <colorspace_fragment>
 }

@@ -1,13 +1,11 @@
 import { useEffect, useRef } from 'react'
 import { useStore } from '@/state/store'
 
-export const WISP_FRONDS = 4
-export const WISP_SEGS = 7
-export const WISP_SEG_LEN = 4.0
+export const WISP_FRONDS = 3
+export const WISP_SEGS = 4
+export const WISP_SEG_LEN = 2.4
 export const WISP_SPREAD = 0.5
 export const WISP_SWAY = 0.7
-export const WISP_FOLLOW = 22
-export const WISP_GLOW_R = 10
 export const WISP_IDLE_AFTER = 2.2
 export const WISP_IDLE_DIM = 0.15
 
@@ -62,8 +60,10 @@ export default function CursorWisp() {
 
     let tx = -1
     let ty = -1
-    let wx = 0
-    let wy = 0
+    let px = 0
+    let py = 0
+    let vx = 0
+    let vy = 0
     let visK = 0
     let aimK = 0
     let idleK = 1
@@ -91,12 +91,21 @@ export default function CursorWisp() {
       ctx.globalCompositeOperation = 'lighter'
       ctx.lineCap = 'round'
 
-      const k = 1 - Math.exp(-dt * WISP_FOLLOW)
-      const gap = Math.hypot(tx - wx, ty - wy)
-      const mTarget = Math.min(1, gap / 28)
+      const spd = Math.hypot(tx - px, ty - py) / Math.max(dt, 1e-3)
+      const mTarget = Math.min(1, spd / 900)
       motionK += (mTarget - motionK) * (1 - Math.exp(-dt * (mTarget > motionK ? 14 : 5)))
-      wx += (tx - wx) * k
-      wy += (ty - wy) * k
+      const vk = 1 - Math.exp(-dt * 12)
+      vx += ((tx - px) / Math.max(dt, 1e-3) - vx) * vk
+      vy += ((ty - py) / Math.max(dt, 1e-3) - vy) * vk
+      px = tx
+      py = ty
+      let ax = tx + vx * 0.014
+      let ay = ty + vy * 0.014
+      const ld = Math.hypot(ax - tx, ay - ty)
+      if (ld > 26) {
+        ax = tx + (ax - tx) * (26 / ld)
+        ay = ty + (ay - ty) * (26 / ld)
+      }
 
       const A = visK * idleK
       const swayK = calm ? 0 : WISP_SWAY
@@ -106,25 +115,26 @@ export default function CursorWisp() {
       for (const fr of fronds) {
         const rx = Math.cos(fr.ang) * segLen
         const ry = Math.sin(fr.ang) * segLen
-        fr.pts[0].x = wx
-        fr.pts[0].y = wy
+        fr.pts[0].x = ax
+        fr.pts[0].y = ay
         for (let i = 1; i < WISP_SEGS; i++) {
-          const ek = 1 - Math.exp(-dt * (16 - i * 1.3))
+          const ek = 1 - Math.exp(-dt * (44 - i * 4))
           fr.pts[i].x += (fr.pts[i - 1].x + rx - fr.pts[i].x) * ek
           fr.pts[i].y += (fr.pts[i - 1].y + ry - fr.pts[i].y) * ek
         }
+        if (motionK <= 0.02) continue
         const perpX = -Math.sin(fr.ang)
         const perpY = Math.cos(fr.ang)
         for (let i = 1; i < WISP_SEGS; i++) {
           const f = i / (WISP_SEGS - 1)
           const sway = Math.sin(t * 1.2 + fr.phase + i * 0.6) * i * swayK
-          const px = fr.pts[i - 1].x + (i > 1 ? Math.sin(t * 1.2 + fr.phase + (i - 1) * 0.6) * (i - 1) * swayK * perpX : 0)
-          const py = fr.pts[i - 1].y + (i > 1 ? Math.sin(t * 1.2 + fr.phase + (i - 1) * 0.6) * (i - 1) * swayK * perpY : 0)
+          const sx = fr.pts[i - 1].x + (i > 1 ? Math.sin(t * 1.2 + fr.phase + (i - 1) * 0.6) * (i - 1) * swayK * perpX : 0)
+          const sy = fr.pts[i - 1].y + (i > 1 ? Math.sin(t * 1.2 + fr.phase + (i - 1) * 0.6) * (i - 1) * swayK * perpY : 0)
           const c = mix(mix(EMBER_HEAD, EMBER_TAIL, f), mix(AIM_HEAD, AIM_TAIL, f), aimK)
-          ctx.strokeStyle = rgba(c, (0.30 - 0.22 * f) * A)
-          ctx.lineWidth = 2.6 * (1 - f * 0.75)
+          ctx.strokeStyle = rgba(c, (0.22 - 0.15 * f) * A * motionK)
+          ctx.lineWidth = 2.0 * (1 - f * 0.75)
           ctx.beginPath()
-          ctx.moveTo(px, py)
+          ctx.moveTo(sx, sy)
           ctx.lineTo(fr.pts[i].x + perpX * sway, fr.pts[i].y + perpY * sway)
           ctx.stroke()
         }
@@ -135,11 +145,11 @@ export default function CursorWisp() {
       if (motionK > 0.02) {
         ctx.fillStyle = rgba(glow, 0.3 * motionK * A)
         ctx.beginPath()
-        ctx.arc(wx, wy, (7 + 6 * motionK) * breathe, 0, Math.PI * 2)
+        ctx.arc(ax, ay, (7 + 6 * motionK) * breathe, 0, Math.PI * 2)
         ctx.fill()
         ctx.fillStyle = rgba(core, 0.2 * motionK * A)
         ctx.beginPath()
-        ctx.arc(wx, wy, (2.6 + 2.4 * motionK) * breathe, 0, Math.PI * 2)
+        ctx.arc(ax, ay, (2.6 + 2.4 * motionK) * breathe, 0, Math.PI * 2)
         ctx.fill()
       }
 
@@ -147,7 +157,7 @@ export default function CursorWisp() {
         ctx.strokeStyle = rgba(AIM_TAIL, 0.22 * aimK * A)
         ctx.lineWidth = 1.2
         ctx.beginPath()
-        ctx.arc(wx, wy, 13, 0, Math.PI * 2)
+        ctx.arc(ax, ay, 13, 0, Math.PI * 2)
         ctx.stroke()
       }
 
@@ -175,8 +185,10 @@ export default function CursorWisp() {
       tx = e.clientX
       ty = e.clientY
       if (first) {
-        wx = tx
-        wy = ty
+        px = tx
+        py = ty
+        vx = 0
+        vy = 0
         for (const fr of fronds) {
           for (const p of fr.pts) {
             p.x = tx

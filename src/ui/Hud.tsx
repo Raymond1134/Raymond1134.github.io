@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import type { CSSProperties, ReactNode } from 'react'
 import { useStore } from '@/state/store'
-import { recentre, enableGyro, disableGyro, gyroAvailable, lookOffset, stillFor } from '@/input/input'
+import { recentre, enableGyro, disableGyro, gyroAvailable, awayOffset, stillFor } from '@/input/input'
 import { worldEvents } from '@/scene/worldEvents'
 import { playUi } from '@/audio/score'
 import { BEACON_DEFAULT_COLOR } from '@/scene/beacons/palette'
@@ -9,6 +9,7 @@ import '@/styles/hud.css'
 
 const EDGE = 56
 const SWIPE = 70
+const MAP_INVITE_KEY = 'aether.map-invite'
 
 const FIELD = /^(input|textarea|select)$/i
 
@@ -32,6 +33,7 @@ export default function Hud() {
   const toggleTextMode = useStore((s) => s.toggleTextMode)
 
   const [invite, setInvite] = useState(false)
+  const [mapInvite, setMapInvite] = useState(false)
 
   const [ghost, setGhost] = useState(false)
 
@@ -119,10 +121,23 @@ export default function Hud() {
   }, [coarse])
 
   useEffect(() => {
+    try { if (sessionStorage.getItem(MAP_INVITE_KEY)) return } catch {}
+    const unsub = useStore.subscribe((s, prev) => {
+      if (prev.phase === 'settle' && s.phase === 'idle' && s.previousId) {
+        try { sessionStorage.setItem(MAP_INVITE_KEY, '1') } catch {}
+        setMapInvite(true)
+        setTimeout(() => setMapInvite(false), 1600)
+        unsub()
+      }
+    })
+    return unsub
+  }, [])
+
+  useEffect(() => {
     if (textMode) return
     const id = setInterval(() => {
       const s = useStore.getState()
-      const away = lookOffset() > 0.35
+      const away = awayOffset() > 0.35
       setGhost(s.phase === 'idle' && !s.mapOpen && away && stillFor() > 4)
     }, 400)
     return () => clearInterval(id)
@@ -150,7 +165,7 @@ export default function Hud() {
           } as CSSProperties
         }
       >
-        {!textMode && <Chip glyph="✦" label="Map" pressed={mapOpen} onClick={toggleMap} />}
+        {!textMode && <Chip glyph="✦" label="Map" pressed={mapOpen} invite={mapInvite} onClick={toggleMap} />}
 
         {!textMode && (
           <Chip

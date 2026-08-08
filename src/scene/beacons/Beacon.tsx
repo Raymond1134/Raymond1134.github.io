@@ -33,14 +33,14 @@ const MOTE_DENSITY_TRIM = 0.95
 
 const HALO_OUTER = 5.5
 const ATMO_WORLD = 14
-const ROLE_GAIN = { current: 1.0, reachable: 0.85, distant: 0.7 } as const
-const HALO_GAIN = { current: 0.55, reachable: 0.68, distant: 0.45 } as const
+const ROLE_GAIN = { current: 1.0, reachable: 0.85, distant: 0.55 } as const
+const HALO_GAIN = { current: 0.55, reachable: 0.68, distant: 0.32 } as const
 
 const PHONE_GLOW_COMP = NO_COMPOSER ? 1.25 : 1
 
 const MOTE_TIER: Record<Quality, number> = { low: 300, medium: 500, high: 800, ultra: 800 }
 const ATMO_OPACITY = 0.045
-const LABEL_REST = 0.62
+const LABEL_REST = 0.92
 
 const DEEP_TINT = new THREE.Color('#233252')
 const WHITE = new THREE.Color('#ffffff')
@@ -327,9 +327,11 @@ export default function Beacon({ node, role }: Props) {
 
     queueT.current += ((st.queuedId === node.id ? 1 : 0) - queueT.current) * (1 - Math.pow(0.001, dt))
 
+    const pd = role === 'current' ? 1 - 0.6 * worldEvents.panelDim : 1
+
     const gain =
       ROLE_GAIN[role] * flicker * (1 + h * 1.8) * nearAtt * boost * distAtt * adm * igniteFlare *
-      flareBoost * ack * (1 + queueT.current * 0.25) * worldEvents.grade.ignite
+      flareBoost * ack * (1 + queueT.current * 0.25) * worldEvents.grade.ignite * pd
     const cm = core.current.material as THREE.ShaderMaterial
     const mm = motes.current.material as THREE.ShaderMaterial
 
@@ -339,7 +341,7 @@ export default function Beacon({ node, role }: Props) {
       LUM.nucleusMin,
       LUM.nucleusMax,
       Math.min(1, h + Math.max(0, boost - 1)),
-    )
+    ) * (role === 'current' ? 1 - 0.5 * worldEvents.panelDim : 1)
     cm.uniforms.uTime.value = t
     cm.uniforms.uExposure.value = worldEvents.grade.exposure
     mm.uniforms.uExposure.value = worldEvents.grade.exposure
@@ -354,7 +356,7 @@ export default function Beacon({ node, role }: Props) {
     mm.uniforms.uTime.value = t
     mm.uniforms.uIntensity.value =
       ROLE_GAIN[role] * flicker * MOTE_DENSITY_TRIM * (role === 'distant' ? 0.5 : 1) *
-      (1 + h * 0.6) * moteFar * distAtt * adm * boost
+      (1 + h * 0.6) * moteFar * distAtt * adm * boost * pd
     mm.uniforms.uPixelRatio.value = state.gl.getPixelRatio()
     mm.uniforms.uScale.value = 1
     motes.current.scale.setScalar(1 + h * 0.6)
@@ -364,7 +366,7 @@ export default function Beacon({ node, role }: Props) {
     hm.uWorld.value = (outerW / 2) * (1 + h * 0.85)
     hm.uGain.value =
       LUM.halo * HALO_GAIN[role] * PHONE_GLOW_COMP * flicker * (1 + h * 1.5) * nearAtt * boost *
-      distAtt * adm * igniteFlare * flareBoost * ack * worldEvents.grade.ignite
+      distAtt * adm * igniteFlare * flareBoost * ack * worldEvents.grade.ignite * pd
     hm.uExposure.value = worldEvents.grade.exposure
     const coolTo = role === 'reachable' ? CLICK_BLUE_DEEP : DEEP_TINT
     ;(hm.uCore.value as THREE.Color).copy(haloCore).lerp(coolTo, 1 - distAtt)

@@ -34,7 +34,8 @@ void main() {
   float dist = max(-mv.z, 0.001);
   vec3 tv = mat3(modelViewMatrix) * aDir;
   vec2 n = normalize(vec2(-tv.y, tv.x) + vec2(1e-5, 0.0));
-  float hw = max(0.45, dist * 0.0024);
+  float near = 1.0 - smoothstep(20.0, 180.0, dist);
+  float hw = max(0.45, dist * 0.0024) * (1.0 + 1.3 * near);
   mv.xy += n * hw * aSide;
   gl_Position = projectionMatrix * mv;
 
@@ -63,7 +64,8 @@ void main() {
   vEnd = smoothstep(2.5, 9.0, w)
        * smoothstep(2.5, 9.0, aLen - w)
        * smoothstep(8.0, 22.0, dist)
-       * min(1.0, 0.45 / hw)
+       * min(1.0, pow(0.45 / hw, 0.6))
+       * (1.0 - 0.45 * smoothstep(80.0, 280.0, dist))
        * reveal;
 
   vCol = aCol;
