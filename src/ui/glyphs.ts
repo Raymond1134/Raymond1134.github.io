@@ -1,6 +1,8 @@
 const GLYPHS: Record<string, string> = {
   github: '◆',
   linkedin: '▣',
+  instagram: '◉',
+  devpost: '⬡',
   mail: '✉',
   phone: '✆',
   external: '↗',

@@ -191,7 +191,7 @@ export default function HoloPanel() {
 
   if (!live) return null
 
-  const titleSize = Math.min(2.45 * scale, (PANEL_W - 4.4 * scale) / (node.title.length * 0.57))
+  const titleSize = Math.min(2.45 * scale, (PANEL_W - 4.4 * scale) / (node.title.length * 0.6))
   const subSize = node.subtitle
     ? Math.min(1.15 * scale, (PANEL_W - 4.4 * scale) / (node.subtitle.length * 0.58))
     : 0
@@ -225,15 +225,15 @@ export default function HoloPanel() {
           anchorY="middle"
           fontSize={titleSize}
           maxWidth={PANEL_W - 4.4 * scale}
-          letterSpacing={0.045}
+          letterSpacing={0.012}
           color={accent}
           material-toneMapped={false}
           fillOpacity={0}
-          outlineWidth="6%"
-          outlineBlur="16%"
+          outlineWidth="4%"
+          outlineBlur="10%"
           outlineColor="#04060f"
           outlineOpacity={0}
-          font="/fonts/Inter-Regular.woff"
+          font="/fonts/Inter-SemiBold.woff"
         >
           {node.title}
         </Text>
@@ -247,8 +247,8 @@ export default function HoloPanel() {
             anchorY="middle"
             fontSize={subSize}
             maxWidth={PANEL_W - 4.4 * scale}
-            letterSpacing={0.08}
-            color="#a9bedd"
+            letterSpacing={0.035}
+            color="#b6c8e4"
             material-toneMapped={false}
             fillOpacity={0}
             outlineWidth="6%"

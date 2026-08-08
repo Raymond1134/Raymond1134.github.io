@@ -1,8 +1,8 @@
 {
   "meta": {
     "name": "Raymond Zheng",
-    "role": "Computer Science Student",
-    "description": "Computer science student at the University of Waterloo. I build deep learning frameworks from scratch, real-time physics engines, and systems that hold up under thirty thousand players.",
+    "role": "Computer Science Student | UWaterloo",
+    "description": "Computer science student at the University of Waterloo. I've built a deep learning framework from scratch, a real-time physics engine, and a Minecraft server that grew past thirty thousand players.",
     "url": "https://raymond1134.github.io",
 
     "themeColorCold": "#2d6fd8",
@@ -17,10 +17,12 @@
       "title": "Raymond Zheng",
       "subtitle": "Computer Science · University of Waterloo",
       "color": "#ffe2b8",
-      "body": "I build things from the bottom up — a deep learning framework with its own autograd and GPU kernels, a physics engine with its own collision solver, a Minecraft world that thirty thousand people played.\n\nEvery light here is somewhere I've been. Pick one.",
+      "body": "Hi! I'm Raymond, a computer science student at the University of Waterloo. I like figuring out how things work by building them myself.\n\nEach light here covers a bit of what I do. Click one to take a look.",
       "links": [
+        { "label": "Email", "url": "mailto:raymond.zheng1@uwaterloo.ca", "icon": "mail" },
+        { "label": "LinkedIn", "url": "https://linkedin.com/in/zraymond", "icon": "linkedin" },
         { "label": "GitHub", "url": "https://github.com/Raymond1134", "icon": "github" },
-        { "label": "LinkedIn", "url": "https://linkedin.com/in/zraymond", "icon": "linkedin" }
+        { "label": "Instagram", "url": "https://instagram.com/raymondzheng1134", "icon": "instagram" }
       ],
       "children": ["work", "projects", "about", "contact"]
     },
@@ -28,17 +30,17 @@
     {
       "id": "work",
       "title": "Work",
-      "subtitle": "Where I've shipped",
+      "subtitle": "Where I've worked",
       "color": "#ffb361",
-      "body": "Ministry servers, an AI video startup, a campus committee, a coding school I founded, and a restaurant floor on a Friday night. Different rooms, same job: keep the thing running and leave it better.",
-      "children": ["viewmax", "ontario", "wcsc", "bytequest", "china-china-palace"]
+      "body": "AI video startup, IT support for the Government of Ontario, event planning for Waterloo's Computer Science Committee, a coding school I founded, a chinese restaurant, and the YMCA.",
+      "children": ["viewmax", "ontario", "wcsc", "bytequest", "china-china-palace", "ymca"]
     },
     {
       "id": "viewmax",
-      "title": "Viewmax",
-      "subtitle": "AI video generation",
+      "title": "ViewMax",
+      "subtitle": "AI video generation · California · ongoing",
       "color": "#ffd166",
-      "body": "Working at Viewmax, an AI video generation company.",
+      "body": "I develop Python tooling and machine learning pipelines to orchestrate AI models for audio and video generation.\n\nI also evaluate the outputs of our tools to improve the consistency and quality of AI-generated media.",
       "tags": ["AI video", "generative models"]
     },
     {
@@ -46,7 +48,7 @@
       "title": "Government of Ontario",
       "subtitle": "Systems Support Officer · Toronto · ongoing",
       "color": "#ff9448",
-      "body": "Technical support for ministry staff — diagnosing and resolving hardware, software, and network issues across the floor.\n\nDiagnosed and repaired enterprise server backup systems, improving the workflow of LTO tape-based backups.",
+      "body": "I provide technical support for ministry staff by diagnosing hardware, software, and network issues and getting people back to work quickly.\n\nI also repaired and improved the enterprise LTO tape backup systems, making the backup workflow faster and more reliable.",
       "tags": ["enterprise support", "networking", "backup systems"]
     },
     {
@@ -54,7 +56,7 @@
       "title": "Waterloo CS Committee",
       "subtitle": "Event Coordinator · Waterloo · 2026",
       "color": "#ffcf9e",
-      "body": "Event coordinator for the **Waterloo Computer Science Committee**. Administered a recruitment event with an industry partner (ZIP), managing budgeting and attendee flow.\n\nSupported planning and execution of multiple events, including membership operations — registrations, payments, and record tracking.",
+      "body": "As event coordinator for the **Waterloo Computer Science Committee**, I ran a recruitment event with an industry partner (ZIP), handling the budget, logistics, and attendee flow on the day.\n\nI also help plan other events and keep membership operations running: registrations, payments, and record tracking.",
       "tags": ["events", "operations", "budgeting"]
     },
     {
@@ -62,7 +64,7 @@
       "title": "ByteQuest Academy",
       "subtitle": "Founder · Mississauga · 2024",
       "color": "#ffab3f",
-      "body": "Founded a ten-week coding program, managing curriculum design and instruction for fifteen students and volunteers.\n\nDesigned and delivered introductory Scratch and Python courses to improve youth access to STEM education, built around computational thinking and projects the students actually wanted to finish.",
+      "body": "I founded a ten-week coding program for twenty students and volunteers, handling everything from curriculum design to teaching.\n\nThe course covered Scratch and Python, built around projects the students picked themselves. The goal was to make programming feel approachable; most of them kept going after the program ended.",
       "tags": ["teaching", "curriculum", "Python", "Scratch"]
     },
     {
@@ -70,24 +72,48 @@
       "title": "China China Palace",
       "subtitle": "Storefront Manager · Mississauga · 2024",
       "color": "#ff8b4d",
-      "body": "Supervised and coordinated team members through peak hours to keep service quality up when the room was full.\n\nRan front-of-house operations and daily closing procedures, handling customer issues and conflict resolution.",
+      "body": "I managed the storefront of a busy restaurant: coordinating the team through peak hours, running daily closing procedures, and handling customer issues on the spot.\n\nGood practice for staying organized when six things need attention at once.",
       "tags": ["operations", "team lead"]
+    },
+
+    {
+      "id": "ymca",
+      "title": "YMCA of Greater Toronto",
+      "subtitle": "Swim Instructor / Lifeguard · Mississauga · 2023",
+      "color": "#7ad4e6",
+      "body": "I taught swim lessons and lifeguarded at the YMCA of Greater Toronto Area. Teaching means breaking a skill down until a 5 year old can do it; guarding means staying alert for hours at a stretch.\n\nBoth have made me more patient and a clearer communicator.",
+      "tags": ["teaching", "safety"]
     },
 
     {
       "id": "projects",
       "title": "Projects",
-      "subtitle": "Built from scratch",
+      "subtitle": "Things I've built",
       "color": "#ff9272",
-      "body": "The through-line is *from scratch*: an autograd engine, a collision solver, a gameplay system with thirty thousand players in it. I'd rather understand the layer below than call into it.",
-      "children": ["nimbleml", "kinematica", "post-it", "mhdungeon"]
+      "body": "Most of these started with the same question: how does this actually work? So I built my own. A deep learning framework, a physics engine, a voice-controlled drone, and a Minecraft server that grew to thirty thousand players.",
+      "children": ["nimbus", "nimbleml", "kinematica", "post-it", "mhdungeon", "link", "armada-foundry"]
+    },
+    {
+      "id": "nimbus",
+      "title": "Nimbus",
+      "subtitle": "A multimodal AI drone system · 2026",
+      "color": "#9ed8f2",
+      "body": "A drone you can fly by talking to it. Speech recognition and intent extraction turn natural language into flight commands, while computer vision gives the drone spatial awareness; all in real time.\n\nA FastAPI backend connects **Gemini** for language understanding, **YOLOv8** for vision, and **ElevenLabs** for voice to a Swift app driving the DJI SDK.",
+      "links": [
+        { "label": "GitHub", "url": "https://github.com/Raymond1134/Nimbus", "icon": "github" },
+        { "label": "Devpost", "url": "https://devpost.com/software/nimbus-n9x04s", "icon": "devpost" }
+      ],
+      "tags": ["Python", "Swift", "DJI SDK", "FastAPI", "Gemini", "YOLOv8", "ElevenLabs", "FreeSolo"]
     },
     {
       "id": "nimbleml",
       "title": "NimbleML",
       "subtitle": "A deep learning framework · ongoing",
       "color": "#ff8fae",
-      "body": "A lightweight deep learning framework written from scratch — over forty neural network modules, automatic differentiation, GPU acceleration, and transformer architectures.\n\nOn top of it, a high-performance GPT with BPE tokenization, tuned through fused kernels, flash attention, and mixed CPU/GPU execution.",
+      "body": "A deep learning framework I wrote from scratch to understand what PyTorch actually does; over forty neural network modules, automatic differentiation, GPU acceleration, and transformer architectures.\n\nTo prove it works, I built a GPT on top of it: BPE tokenization, fused kernels, flash attention, and mixed CPU/GPU execution.",
+      "links": [
+        { "label": "GitHub", "url": "https://github.com/Raymond1134/NimbleML", "icon": "github" }
+      ],
       "tags": ["Python", "C++", "NumPy", "CuPy", "autograd", "transformers", "CUDA"]
     },
     {
@@ -95,7 +121,10 @@
       "title": "Kinematica",
       "subtitle": "Real-time 3D physics engine · 2025",
       "color": "#a3bdf7",
-      "body": "A real-time 3D physics engine supporting soft-body and rigid-body interaction, with GJK-based collision detection for arbitrary meshes and custom solvers.\n\nIt ships with a tool for creating and configuring physics bodies through a material loading system, so a developer can prototype complex mechanics without touching the solver.",
+      "body": "A real-time 3D physics engine with soft-body and rigid-body dynamics, GJK collision detection for arbitrary meshes, and custom solvers.\n\nIt includes a material loading system for creating and configuring physics bodies, so you can prototype complex mechanics without touching solver code.",
+      "links": [
+        { "label": "GitHub", "url": "https://github.com/Raymond1134/Kinematica", "icon": "github" }
+      ],
       "tags": ["C++", "C", "raylib", "computational geometry", "GJK", "soft body"]
     },
     {
@@ -103,7 +132,11 @@
       "title": "Post-It",
       "subtitle": "AR lens for Snapchat Spectacles · 2025",
       "color": "#ff7a58",
-      "body": "An augmented reality lens built with Snap3D, driven entirely by hand gestures on Snapchat Spectacles.\n\nTop 32 overall out of more than a thousand participants at **Hack the North 2025**.",
+      "body": "An augmented reality lens for Snapchat Spectacles, built with Snap3D and controlled entirely by hand gestures.\n\nBuilt at **Hack the North 2025**, where it placed in the top 32 out of more than a thousand participants.",
+      "links": [
+        { "label": "GitHub", "url": "https://github.com/rickytang666/post-it", "icon": "github" },
+        { "label": "Devpost", "url": "https://devpost.com/software/post-it-jrswqx", "icon": "devpost" }
+      ],
       "tags": ["Snap3D", "TypeScript", "AR", "gesture input"]
     },
     {
@@ -111,8 +144,32 @@
       "title": "MHDungeon",
       "subtitle": "A Minecraft world, 30,000 players · 2025",
       "color": "#d49bf7",
-      "body": "A large-scale Minecraft server with custom gameplay systems written in Skript against the Bukkit API — dungeon generation, enemy scaling, parties, path-finding, bosses, and reward pipelines.\n\nScaled the infrastructure past **30,000 unique players**, resolving production issues and shipping new content live. I also ran the marketing, community outreach, and monetization, which cleared **$8,000** in profit.",
+      "body": "A large-scale Minecraft server with custom gameplay written in Skript against the Bukkit API; dungeon generation, enemy scaling, parties, pathfinding, bosses, and reward systems.\n\nIt grew past **30,000 unique players**. I scaled the infrastructure, fixed production issues live, and shipped new content on a running server. I also handled the marketing and community side, which cleared **$8,000** in profit.",
       "tags": ["Skript", "Bukkit API", "live ops", "game design", "community"]
+    },
+
+    {
+      "id": "link",
+      "title": "Link",
+      "subtitle": "Matching students to extracurriculars · 2024",
+      "color": "#93e6c8",
+      "body": "A platform that helps students find extracurriculars in their community. Members create and join communities, post upcoming activities, and the matchmaking system pairs each post with the students most likely to care about it.\n\nBuilt at **EducateHacks 2024**: a Python **websockets** backend with **MongoDB** for storage, and a hand-rolled HTML/CSS/JavaScript front end.",
+      "links": [
+        { "label": "GitHub", "url": "https://github.com/Raymond1134/Link", "icon": "github" },
+        { "label": "Devpost", "url": "https://devpost.com/software/link-fro9b8", "icon": "devpost" }
+      ],
+      "tags": ["Python", "websockets", "MongoDB", "gensim", "word2vec", "JavaScript"]
+    },
+    {
+      "id": "armada-foundry",
+      "title": "Armada Foundry",
+      "subtitle": "A progressive tank-building game",
+      "color": "#e89a8a",
+      "body": "A progressive tank-building game made in **Unity**. You design your own tank and keep upgrading it as you play.",
+      "links": [
+        { "label": "GitHub", "url": "https://github.com/Raymond1134/Armada-Foundry", "icon": "github" }
+      ],
+      "tags": ["Unity", "C#", "game design"]
     },
 
     {
@@ -120,7 +177,7 @@
       "title": "About",
       "subtitle": "The short version",
       "color": "#ffd98f",
-      "body": "I'm a computer science student at the University of Waterloo, in the co-op program. Most of what I know came from rebuilding a thing I'd used until I understood why it worked.\n\nRight now that's machine learning systems: kernels, autograd, attention — the parts underneath the framework.",
+      "body": "I'm a computer science student at the University of Waterloo, in the co-op program. Right now I'm most interested in machine learning systems: kernels, autograd, attention, the machinery underneath the frameworks.\n\nOutside of code, I swimm, and I've run everything from coding classes to campus events.",
       "children": ["education", "skills"]
     },
     {
@@ -135,7 +192,7 @@
       "title": "Skills",
       "subtitle": "What I reach for",
       "color": "#a9e8dc",
-      "body": "**Languages** — Python, C++, C#, TypeScript, JavaScript, HTML/CSS, Racket, Skript.\n\n**Machine learning** — PyTorch, TensorFlow, NumPy, CuPy, OpenCV, autograd, transformer architectures.\n\n**Data** — Pandas, Matplotlib, SQL, MongoDB, data processing, augmentation, dataset analysis.\n\n**Also** — React Native, Flask, Expo, .NET, raylib, OpenMP, GPU programming, computational geometry, real-time systems.",
+      "body": "**Languages** — Python, C++, C#, TypeScript, JavaScript, HTML/CSS, Racket, Skript.\n\n**Machine learning** — PyTorch, TensorFlow, Scikit-learn, NumPy, CuPy, OpenCV, autograd, transformer architectures.\n\n**Data** — Pandas, Matplotlib, SQL, MongoDB, data processing, augmentation, dataset analysis.\n\n**Also** — React Native, Flask, Expo, .NET, raylib, OpenMP, GPU programming, computational geometry, real-time systems.",
       "tags": ["deep learning", "NLP", "computer vision", "LLMs", "GPU programming"]
     },
 
@@ -144,12 +201,13 @@
       "title": "Contact",
       "subtitle": "Say hello",
       "color": "#ffb894",
-      "body": "I'm looking for co-op terms in machine learning, systems, and graphics. The fastest way to reach me is email.",
+      "body": "I'm looking for co-op roles in machine learning. Email is the fastest way to reach me; I read everything.",
       "links": [
         { "label": "Email", "url": "mailto:raymond.zheng1@uwaterloo.ca", "icon": "mail" },
         { "label": "437-986-6118", "url": "tel:+14379866118", "icon": "phone" },
         { "label": "LinkedIn", "url": "https://linkedin.com/in/zraymond", "icon": "linkedin" },
-        { "label": "GitHub", "url": "https://github.com/Raymond1134", "icon": "github" }
+        { "label": "GitHub", "url": "https://github.com/Raymond1134", "icon": "github" },
+        { "label": "Instagram", "url": "https://instagram.com/raymondzheng1134", "icon": "instagram" }
       ]
     }
   ]

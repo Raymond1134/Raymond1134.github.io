@@ -3,7 +3,7 @@ import { z } from 'zod'
 const LinkSchema = z.object({
   label: z.string(),
   url: z.string(),
-  icon: z.enum(['github', 'linkedin', 'mail', 'phone', 'external', 'doc', 'play']).optional(),
+  icon: z.enum(['github', 'linkedin', 'instagram', 'devpost', 'mail', 'phone', 'external', 'doc', 'play']).optional(),
 })
 
 const MediaSchema = z.object({
