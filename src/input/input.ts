@@ -38,6 +38,7 @@ let startX = 0
 let startY = 0
 let pinchStart = 0
 let dollyStart = 0
+let dollySign = 1
 let lastInteraction = typeof performance !== 'undefined' ? performance.now() : 0
 let lastPX = 0
 let lastPY = 0
@@ -65,6 +66,7 @@ export function attachInput(el: HTMLElement): () => void {
       const [a, b] = [...active.values()]
       pinchStart = gap(a, b)
       dollyStart = input.dolly
+      dollySign = Math.cos(input.look.yaw) >= 0 ? 1 : -1
     }
     lastInteraction = performance.now()
   }
@@ -94,7 +96,7 @@ export function attachInput(el: HTMLElement): () => void {
     if (active.size === 2) {
       const [a, b] = [...active.values()]
       const d = gap(a, b)
-      if (pinchStart > 0) input.dolly = clamp(dollyStart + (d - pinchStart) * 0.06, -14, 16)
+      if (pinchStart > 0) input.dolly = clamp(dollyStart + (d - pinchStart) * 0.06 * dollySign, -14, 16)
       return
     }
 
@@ -118,7 +120,8 @@ export function attachInput(el: HTMLElement): () => void {
 
   const onWheel = (e: WheelEvent) => {
     e.preventDefault()
-    input.dolly = clamp(input.dolly + e.deltaY * 0.012, -14, 16)
+    const s = Math.cos(input.look.yaw) >= 0 ? 1 : -1
+    input.dolly = clamp(input.dolly + e.deltaY * 0.012 * s, -14, 16)
     lastInteraction = performance.now()
     recentring.on = false
   }
@@ -190,11 +193,11 @@ function attachGyro() {
     const a = (screen.orientation?.angle ?? 0) * DEG
     const c = Math.cos(a)
     const s = Math.sin(a)
-    const roll = e.gamma * c - e.beta * s
-    const tip = e.beta * c + e.gamma * s
+    const roll = e.gamma * c + e.beta * s
+    const tip = e.beta * c - e.gamma * s
     if (!base) base = { roll, tip }
 
-    const yaw = clamp(-(roll - base.roll) * DEG * GYRO_GAIN, -GYRO_MAX, GYRO_MAX)
+    const yaw = clamp((roll - base.roll) * DEG * GYRO_GAIN, -GYRO_MAX, GYRO_MAX)
     const pitch = clamp((tip - base.tip) * DEG * GYRO_GAIN, -GYRO_MAX, GYRO_MAX)
 
     smoothed.x += (yaw - smoothed.x) * 0.12
@@ -206,9 +209,11 @@ function attachGyro() {
 
   addEventListener('deviceorientation', onOrient)
   addEventListener('orientationchange', onReset)
+  screen.orientation?.addEventListener('change', onReset)
   detachGyro = () => {
     removeEventListener('deviceorientation', onOrient)
     removeEventListener('orientationchange', onReset)
+    screen.orientation?.removeEventListener('change', onReset)
   }
 }
 

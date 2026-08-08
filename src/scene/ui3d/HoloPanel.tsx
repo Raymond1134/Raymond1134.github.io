@@ -223,6 +223,7 @@ export default function HoloPanel() {
         <Text
           ref={titleRef}
           position={[-PANEL_W / 2 + 1.4 * scale, PANEL_H / 2 - 2.2 * scale, 0.05]}
+          renderOrder={3}
           anchorX="left"
           anchorY="middle"
           fontSize={titleSize}
@@ -244,6 +245,7 @@ export default function HoloPanel() {
           <Text
             ref={subRef}
             position={[-PANEL_W / 2 + 1.4 * scale, PANEL_H / 2 - 4.5 * scale, 0.05]}
+            renderOrder={3}
             anchorX="left"
             anchorY="middle"
             fontSize={0.95 * scale}

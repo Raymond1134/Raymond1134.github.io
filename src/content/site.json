@@ -39,8 +39,7 @@
       "subtitle": "AI video generation",
       "color": "#ffd166",
       "body": "Working at Viewmax, an AI video generation company.",
-      "tags": ["AI video", "generative models"],
-      "related": ["nimbleml"]
+      "tags": ["AI video", "generative models"]
     },
     {
       "id": "ontario",
@@ -89,8 +88,7 @@
       "subtitle": "A deep learning framework · ongoing",
       "color": "#ff8fae",
       "body": "A lightweight deep learning framework written from scratch — over forty neural network modules, automatic differentiation, GPU acceleration, and transformer architectures.\n\nOn top of it, a high-performance GPT with BPE tokenization, tuned through fused kernels, flash attention, and mixed CPU/GPU execution.",
-      "tags": ["Python", "C++", "NumPy", "CuPy", "autograd", "transformers", "CUDA"],
-      "related": ["skills"]
+      "tags": ["Python", "C++", "NumPy", "CuPy", "autograd", "transformers", "CUDA"]
     },
     {
       "id": "kinematica",

@@ -80,12 +80,21 @@ void main() {
   floorCol += uAbyssCol * (uAbyssL * depthW * pulse * mistN * (0.8 + 0.2 * uBreath));
 
   float rr = length(pf.xz - vec2(0.0, -170.0));
-  float rim = exp(-abs(rr - HORIZON_R) / 34.0) * uHorizonL;
+  float azf = atan(pf.z + 170.0, pf.x);
+  vec2 azv = vec2(cos(azf), sin(azf)) * 2.1;
+  float rn = snoise(vec3(azv, 4.2));
+  float rim = exp(-abs(rr - HORIZON_R * (1.0 + 0.09 * rn)) / (26.0 + 18.0 * rn * rn)) * uHorizonL;
+  rim *= 0.72 + 0.48 * smoothstep(-0.6, 0.8, snoise(vec3(azv * 1.7, 8.8)));
   rim *= mix(1.0, 0.35, smoothstep(600.0, 1400.0, tf));
   floorCol = aerialCol(floorCol + uRimCol * rim, tf);
 
-  float floorA = smoothstep(260.0, 560.0, tf) * (1.0 - smoothstep(750.0, 1200.0, tf))
-               * (0.30 + 0.38 * mistN);
+  float coast = snoise(vec3(pf.xz * 0.0016, 3.3));
+  float coast2 = snoise(vec3(pf.xz * 0.0007, 9.1));
+  float inE = 260.0 + 130.0 * coast2;
+  float outE = 750.0 + 260.0 * coast;
+  float wisp = 0.5 + 0.5 * snoise(vec3(pf.xz * 0.0045 + vec2(uTime * 0.012, 0.0), 6.6));
+  float floorA = smoothstep(inE, inE + 320.0, tf) * (1.0 - smoothstep(outE, outE + 480.0, tf))
+               * (0.24 + 0.30 * mistN + 0.16 * wisp);
   float onFloor = step(rd.y, -0.02) * step(tf, t) * step(0.0, tf);
 
   vec3 col = mix(shellRgb, floorCol * floorA, onFloor);

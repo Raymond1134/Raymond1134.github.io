@@ -20,6 +20,17 @@ function WeaveOverlay({ closing, onGone }: { closing: boolean; onGone: () => voi
   const compact = useStore((s) => s.compact)
   const toggleMap = useStore((s) => s.toggleMap)
   const panelRef = useRef<HTMLDivElement>(null)
+  const scrollRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    const el = scrollRef.current
+    const cur = el?.querySelector('.is-current')
+    if (!el || !cur) return
+    const c = cur.getBoundingClientRect()
+    const r = el.getBoundingClientRect()
+    el.scrollLeft += c.left + c.width / 2 - (r.left + r.width / 2)
+    el.scrollTop += c.top + c.height / 2 - (r.top + r.height / 2)
+  }, [])
 
   useEffect(() => {
     if (!closing) return
@@ -73,7 +84,13 @@ function WeaveOverlay({ closing, onGone }: { closing: boolean; onGone: () => voi
           </button>
         </header>
 
-        {compact ? <WeaveList /> : <WeaveGraph />}
+        {compact ? (
+          <div className="weave-scroll" ref={scrollRef}>
+            <WeaveGraph />
+          </div>
+        ) : (
+          <WeaveGraph />
+        )}
 
         <p className="weave-hint">Choose a light{compact ? '' : ' · Esc to close'}</p>
       </div>
@@ -219,50 +236,5 @@ function WeaveGraph() {
         )
       })}
     </svg>
-  )
-}
-
-function WeaveList() {
-  const graph = useStore((s) => s.graph)
-  const currentId = useStore((s) => s.currentId)
-  const toggleMap = useStore((s) => s.toggleMap)
-
-  return (
-    <ul className="weave-list">
-      {graph.order.map((id) => {
-        const node = graph.nodes.get(id)
-        if (!node) return null
-        const isCurrent = id === currentId
-        return (
-          <li key={id}>
-            <a
-              className={`weave-row${isCurrent ? ' is-current' : ''}`}
-              href={hrefFor(id)}
-              aria-current={isCurrent ? 'page' : undefined}
-              onClick={() => isCurrent && toggleMap()}
-              style={
-                {
-                  '--row-accent': node.color ?? BEACON_DEFAULT_COLOR,
-                  '--row-depth': node.depth,
-                } as CSSProperties
-              }
-            >
-              <span className="dot" aria-hidden />
-              <span className="titles">
-                <span className="t">{node.title}</span>
-                {node.subtitle && <span className="s">{node.subtitle}</span>}
-              </span>
-              {isCurrent ? (
-                <span className="here">✦ here</span>
-              ) : (
-                <span className="chev" aria-hidden>
-                  ›
-                </span>
-              )}
-            </a>
-          </li>
-        )
-      })}
-    </ul>
   )
 }

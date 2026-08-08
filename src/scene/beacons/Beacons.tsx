@@ -9,6 +9,15 @@ export default function Beacons() {
   }, [])
   const graph = useStore((s) => s.graph)
   const currentId = useStore((s) => s.currentId)
+  const hovered = useStore((s) => s.hoveredId)
+
+  useEffect(() => {
+    if (hovered) document.body.dataset.cursor = 'aim'
+    else delete document.body.dataset.cursor
+    return () => {
+      delete document.body.dataset.cursor
+    }
+  }, [hovered])
 
   const roles = useMemo(() => {
     const reachable = new Set(neighborsOf(graph, currentId))

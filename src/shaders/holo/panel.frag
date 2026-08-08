@@ -32,7 +32,7 @@ void main() {
     float shimmer = snoise(vec3(p.x * 0.14, p.y * 0.14, uTime * 0.16));
     float w = 1.0 + 0.45 * swell;
     core = exp(-(d * d) / 0.15) * (0.15 + 0.85 * smoothstep(-0.1, 0.9, shimmer));
-    rim = (core + exp(-(d * d) / (w * w)) * (0.45 + 0.35 * shimmer)) * well;
+    rim = (core + exp(-(d * d) / (w * w * 0.55)) * (0.30 + 0.24 * shimmer)) * well;
   }
 
   float inside = smoothstep(1.0, 5.0, -d);
@@ -43,8 +43,8 @@ void main() {
 
   float breathe = 0.86 + 0.14 * uBreath;
 
-  float alpha = (veil + rim * 0.48) * edgeFade * breathe * uOpacity;
-  vec3 col = uColor * (0.6 + rim * 1.5 + veil * 3.0) + vec3(core * core * 0.2 * well);
+  float alpha = (veil + rim * 0.36) * edgeFade * breathe * uOpacity;
+  vec3 col = uColor * (0.5 + rim * 1.05 + veil * 2.4) + vec3(core * core * 0.14 * well);
 
   col = gelTint(col, (p.x - p.y) * 0.10 + uTime * 0.13, 0.22);
 

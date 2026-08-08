@@ -42,8 +42,8 @@ void main() {
   float dustA = (exp(-r2 * 4.5) + exp(-r2 * 1.6) * 0.30) * (1.0 - r2);
 
   float body = smoothstep(1.0, 0.62, r2);
-  float rim  = (smoothstep(0.55, 0.9, r2) - smoothstep(0.9, 1.0, r2)) * 0.5 * vDefocus;
-  float flyA = body * 0.85 + rim;
+  float rim  = (smoothstep(0.55, 0.9, r2) - smoothstep(0.9, 1.0, r2)) * 0.4 * vDefocus;
+  float flyA = body * 0.72 + rim;
 
   float moteA = exp(-r2 * 1.1) * (1.0 - r2) * 0.45;
 

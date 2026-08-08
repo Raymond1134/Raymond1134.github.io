@@ -17,7 +17,7 @@ export default function BeaconSheet() {
 function SheetContent() {
   const phase = useStore((s) => s.phase)
   const node = useStore((s) => s.graph.nodes.get(s.currentId)!)
-  const [expanded, setExpanded] = useState(false)
+  const [expanded, setExpanded] = useState(true)
   const bodyRef = useRef<HTMLDivElement>(null)
   const swipe = useRef<{ y: number; grab: boolean } | null>(null)
 
@@ -36,7 +36,10 @@ function SheetContent() {
     if (!s) return
     const dy = e.clientY - s.y
     if (Math.abs(dy) < TAP_SLOP) {
-      if (s.grab) setExpanded((v) => !v)
+      const target = e.target as HTMLElement
+      if (target.closest('a')) return
+      if (!expanded) setExpanded(true)
+      else if (s.grab) setExpanded(false)
       return
     }
     setExpanded(dy < 0)
@@ -65,6 +68,7 @@ function SheetContent() {
         aria-controls="sheet-body"
       >
         <span className="sheet-bar" aria-hidden />
+        <span className="sheet-peek">{node.title}</span>
         <span className="sr-only">{expanded ? 'Collapse details' : 'Expand details'}</span>
       </button>
 

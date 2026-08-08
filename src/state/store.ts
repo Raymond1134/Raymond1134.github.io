@@ -8,7 +8,7 @@ export type Quality = 'low' | 'medium' | 'high' | 'ultra'
 
 type Fx = 'full' | 'reduced' | 'off'
 
-export const PARTICLE_TEX = { low: 384, medium: 480, high: 512, ultra: 720 } as const
+export const PARTICLE_TEX = { low: 256, medium: 320, high: 416, ultra: 512 } as const
 
 export const TRAVEL = { turn: 0.55, flight: 1.35, settle: 0.7 } as const
 const TRAVEL_TOTAL = TRAVEL.turn + TRAVEL.flight + TRAVEL.settle

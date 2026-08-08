@@ -4,7 +4,7 @@ precision highp float;
 #include ../lib/grade;
 
 uniform float uBreath;
-uniform float uThreadL;
+uniform float uHazeL;
 uniform float uPulseL;
 uniform vec3  uCold;
 uniform vec3  uClick;
@@ -12,26 +12,25 @@ uniform float uExposure;
 uniform vec2  uResolution;
 
 varying float vDepth;
+varying float vAcross;
 varying float vEnd;
 varying float vAdj;
 varying float vPulse;
-varying float vTw;
+varying float vGlow;
 varying vec3  vCol;
 
 void main() {
-  vec2 q = gl_PointCoord - 0.5;
-  float r2 = dot(q, q);
-  if (r2 > 0.25) discard;
-  float disc = exp(-r2 * 10.0) * (1.0 - r2 * 4.0);
+  float x2 = vAcross * vAcross;
+  float sheath = exp(-x2 * 4.5) * 0.34 + exp(-x2 * 16.0) * 0.20;
 
-  vec3 col = mix(uCold, vCol, 0.30);
-  col = mix(col, uClick, vAdj * 0.45);
+  vec3 col = mix(uCold, vCol, 0.18);
+  col = mix(col, uClick, vAdj * 0.12);
   col = aerialCol(col, vDepth);
 
-  float lum = uThreadL * (0.62 + 0.38 * vAdj) * vTw + uPulseL * vPulse;
-  col *= lum * (0.88 + 0.12 * uBreath);
+  float lum = uHazeL * (0.55 + 0.45 * vAdj) * vGlow + uPulseL * vPulse;
+  col *= lum * (0.90 + 0.10 * uBreath);
 
-  float a = disc * vEnd * aerialGain(vDepth);
+  float a = sheath * vEnd * aerialGain(vDepth);
 
 #if PHONE_GRADE
   col = aetherGrade(col, uExposure, PHONE_HOLD);

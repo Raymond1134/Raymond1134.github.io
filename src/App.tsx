@@ -10,6 +10,7 @@ import FirstHint from '@/ui/FirstHint'
 import OvertureSkip from '@/ui/OvertureSkip'
 import SoundHint from '@/ui/SoundHint'
 import BeaconSheet from '@/ui/BeaconSheet'
+import CursorWisp from '@/ui/CursorWisp'
 import Weave from '@/ui/Weave'
 import BeaconTabStops from '@/ui/BeaconTabStops'
 import Shortcuts from '@/ui/Shortcuts'
@@ -135,6 +136,7 @@ export default function App() {
       {!textMode && !overture && <SoundHint />}
       {!textMode && <BeaconTabStops />}
       {!textMode && <Shortcuts />}
+      {!textMode && <CursorWisp />}
       {textShown && (
         <div className="tm-fade" data-closing={!textMode || undefined}>
           <TextMode />

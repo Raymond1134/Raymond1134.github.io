@@ -42,17 +42,17 @@ void main() {
 
   float dist = max(-mv.z, 0.001);
 
-  float isFly  = step(0.85, seed) * (1.0 - step(0.97, seed));
+  float isFly  = step(0.78, seed) * (1.0 - step(0.97, seed));
   float isMote = step(0.97, seed);
   float isDust = 1.0 - isFly - isMote;
   vClass = isFly + isMote * 2.0;
 
   float u = fract(seed * 61.7);
 
-  float sizeClass = isDust * (0.30 + 0.25 * u)
-                  + isFly  * (0.9 + 1.3 * u * u)
+  float sizeClass = isDust * (0.42 + 0.30 * u)
+                  + isFly  * (1.0 + 1.4 * u * u)
                   + isMote * (4.0 + 4.0 * u);
-  float cap = (isDust * 6.0 + isFly * 13.0 + isMote * 24.0) * uPixelRatio;
+  float cap = (isDust * 7.0 + isFly * 14.0 + isMote * 24.0) * uPixelRatio;
 
   vDefocus = 1.0 - smoothstep(3.0, 18.0, dist);
   float spread = 1.0 + 1.6 * vDefocus;
@@ -61,8 +61,8 @@ void main() {
   float size0 = min(pxRaw, cap);
   float size1 = min(pxRaw * spread, cap * (1.0 + vDefocus));
 
-  float dim = isDust * (0.20 + 0.35 * u * u)
-            + isFly  * (0.55 + 0.45 * u)
+  float dim = isDust * (0.30 + 0.48 * u * u)
+            + isFly  * (0.62 + 0.50 * u)
             + isMote;
 
   float omega = mix(0.10, 0.20, fract(seed * 7.31)) * 6.2831853;

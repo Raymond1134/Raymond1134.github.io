@@ -31,6 +31,7 @@ const CALM_K = CALM ? 0.35 : 1
 const MAX_SPEED = CALM ? 10.0 : 42.0
 const COLOR_WARMTH = 1.3
 const CONDENSE = 34.0
+const FLOW = 14.0
 const SIZE_TIER: Record<Quality, number> = { low: 1.35, medium: 1.3, high: 1.2, ultra: 1.0 }
 const LIGHT_RADIUS = 30
 
@@ -104,6 +105,7 @@ function buildAssets(gl: THREE.WebGLRenderer, size: number, opacity: number): Fi
     uDamping: { value: damping },
     uMaxSpeed: { value: MAX_SPEED },
     uCondense: { value: CONDENSE * forceScale },
+    uFlow: { value: FLOW * forceScale * CALM_K },
     uTravelDir: { value: new THREE.Vector3() },
     uTravelBoost: { value: 0 },
     uBreath: { value: 0.5 },

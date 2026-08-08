@@ -7,6 +7,7 @@ uniform float uCurlAmp;
 uniform float uDamping;
 uniform float uMaxSpeed;
 uniform float uCondense;
+uniform float uFlow;
 uniform vec3  uTravelDir;
 uniform float uTravelBoost;
 uniform float uBreath;
@@ -30,17 +31,36 @@ void main() {
   float breathCond = 1.0 + (uBreath - 0.5) * 0.3;
 
   vec3 macro = curlNoise(pos * 0.011 + vec3(0.0, uTime * 0.012, uTime * 0.008), 0.6)
-             * (uCurlAmp * 1.4 * breathCurl);
+             * (uCurlAmp * 0.9 * breathCurl);
 
   vec3 gp = pos * 0.012 + vec3(uTime * 0.006, 0.0, uTime * 0.004);
   float n = snoise(gp);
   const float E = 0.25;
-  vec3 grad = vec3(
+  vec3 gradN = vec3(
     snoise(gp + vec3(E, 0.0, 0.0)) - n,
     snoise(gp + vec3(0.0, E, 0.0)) - n,
     snoise(gp + vec3(0.0, 0.0, E)) - n
   ) / E;
-  vec3 gather = -grad * n * (uCondense * breathCond * (0.4 + 0.6 * seed));
+
+  vec3 gq = pos * 0.0095 + vec3(31.7, uTime * 0.005 - 12.3, 57.9 - uTime * 0.004);
+  float m = snoise(gq);
+  vec3 gradM = vec3(
+    snoise(gq + vec3(E, 0.0, 0.0)) - m,
+    snoise(gq + vec3(0.0, E, 0.0)) - m,
+    snoise(gq + vec3(0.0, 0.0, E)) - m
+  ) / E;
+
+  float drifter = step(fract(seed * 13.73), 0.30);
+  float gatherK = mix(1.0, 0.12, drifter);
+  vec3 gather = -(gradN * n + gradM * m * 0.9)
+              * (uCondense * 0.6 * breathCond * (0.4 + 0.6 * seed) * gatherK);
+
+  vec3 strand = cross(gradN, gradM);
+  float sl = length(strand);
+  float prox = exp(-(n * n + m * m) * 9.0);
+  if (sl > 1e-4) {
+    vel += (strand / sl) * (uFlow * prox * (0.6 + 0.8 * seed) * (1.0 - drifter) * uDt);
+  }
 
   vec3 micro = curlNoise(pos * uCurlFreq + vec3(0.0, uTime * 0.05, uTime * 0.03), 0.35)
              * (uCurlAmp * 0.4) * (0.55 + 0.9 * seed);

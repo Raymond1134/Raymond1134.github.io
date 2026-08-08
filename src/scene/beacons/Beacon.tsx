@@ -44,6 +44,8 @@ const LABEL_REST = 0.62
 
 const DEEP_TINT = new THREE.Color('#233252')
 const WHITE = new THREE.Color('#ffffff')
+const dirSelf = new THREE.Vector3()
+const dirCur = new THREE.Vector3()
 
 const CLICK_BLUE = new THREE.Color(CLICK_BLUE_HEX)
 const CLICK_BLUE_DEEP = new THREE.Color(CLICK_BLUE_DEEP_HEX)
@@ -389,6 +391,14 @@ export default function Beacon({ node, role }: Props) {
 
       let o = phase === 'idle' ? (coarse ? 1 : LABEL_REST + (1 - LABEL_REST) * h) : 0
       o *= (1 - 0.45 * THREE.MathUtils.smoothstep(d, 120, 300)) * adm
+      if (role !== 'current') {
+        const cur = st.graph.nodes.get(st.currentId)
+        if (cur) {
+          dirSelf.copy(node.worldPosition).sub(state.camera.position).normalize()
+          dirCur.copy(cur.worldPosition).sub(state.camera.position).normalize()
+          o *= 1 - 0.85 * THREE.MathUtils.smoothstep(dirSelf.dot(dirCur), 0.985, 0.998) * (1 - h)
+        }
+      }
       label.current.visible = o > 0.01
       if (labelText.current) {
         const tt = labelText.current as unknown as { fillOpacity: number; outlineOpacity: number }
@@ -407,13 +417,11 @@ export default function Beacon({ node, role }: Props) {
           if (!canHoverPointer || !interactive) return
           e.stopPropagation()
           setHovered(node.id)
-          document.body.style.cursor = 'pointer'
         }}
         onPointerOut={() => {
           if (!canHoverPointer) return
           if (useStore.getState().hoveredId !== node.id) return
           setHovered(null)
-          document.body.style.cursor = ''
         }}
         onPointerUp={(e) => {
           if (input.dragDistance > TAP_SLOP) return

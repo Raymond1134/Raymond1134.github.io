@@ -2,19 +2,20 @@ import * as THREE from 'three'
 
 export const LUM = {
   abyss: 0.0015,
-  midBand: 0.012,
-  zenith: 0.048,
-  veils: 0.060,
+  midBand: 0.0105,
+  zenith: 0.040,
+  veils: 0.050,
   deepSnow: 0.045,
   envAmbientClamp: 0.100,
 
   vaultGlass: 0.075,
-  horizonRim: 0.30,
+  horizonRim: 0.24,
   trenchCrest: 0.045,
   abyssGlow: 0.20,
-  aureole: 0.22,
-  thread: 0.42,
+  aureole: 0.12,
+  thread: 0.55,
   threadPulse: 1.00,
+  threadHaze: 0.06,
   lensFlare: 0.60,
   halo: 3.00,
   aperture: 0.30,
@@ -53,7 +54,7 @@ export const DOME_STOPS = {
 const MEDIUM: Array<keyof typeof LUM> = [
   'abyss', 'midBand', 'zenith', 'veils', 'deepSnow',
   'horizonRim', 'trenchCrest', 'abyssGlow', 'aureole', 'thread',
-  'threadPulse', 'lensFlare', 'aperture',
+  'threadPulse', 'threadHaze', 'lensFlare', 'aperture',
 ]
 const LIGHT: Array<keyof typeof LUM> = [
   'halo', 'nucleusMin', 'nucleusMax',
