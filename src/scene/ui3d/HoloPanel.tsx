@@ -43,10 +43,9 @@ interface TroikaText {
 
 export default function HoloPanel() {
   const node = useStore((s) => s.graph.nodes.get(s.currentId)!)
-  const compact = useStore((s) => s.compact)
   const portrait = useStore((s) => s.portrait)
 
-  const { w: PANEL_W, h: PANEL_H } = panelSizeFor(compact, portrait)
+  const { w: PANEL_W, h: PANEL_H } = panelSizeFor(portrait)
   const scale = PANEL_W / 30
 
   const accent = node.color ?? BEACON_DEFAULT_COLOR
@@ -93,6 +92,7 @@ export default function HoloPanel() {
       uniforms: {
         uSize: { value: new THREE.Vector2(30, 17) },
         uOpacity: { value: 0 },
+        uColor: { value: new THREE.Color(BEACON_DEFAULT_COLOR) },
       },
       transparent: true,
       depthWrite: false,
@@ -146,7 +146,7 @@ export default function HoloPanel() {
 
     const shouldLive = fade > 0.004 || target > 0
     if (shouldLive !== live) setLive(shouldLive)
-    const shouldHtml = !compact && fade > 0.02
+    const shouldHtml = fade > 0.02
     if (shouldHtml !== htmlLive) setHtmlLive(shouldHtml)
 
     const g = groupRef.current
@@ -165,6 +165,7 @@ export default function HoloPanel() {
     if (smoke) {
       smoke.uniforms.uOpacity.value = 0.85 * fade
       ;(smoke.uniforms.uSize.value as THREE.Vector2).set(PANEL_W + GLOW_PAD_W, PANEL_H + GLOW_PAD_H)
+      ;(smoke.uniforms.uColor.value as THREE.Color).copy(accentColor)
     }
 
     const efTitle = ef(STAGGER.title)
@@ -312,27 +313,16 @@ export default function HoloPanel() {
         )}
 
         <Suspense fallback={null}>
-          {node.media.map((m, i) =>
-            compact ? (
-              <MediaTile
-                key={m.src}
-                media={m}
-                position={[0, -2 - i * 7, 0.3]}
-                width={PANEL_W * 0.72}
-                accent={accentColor}
-                fadeRef={mediaFade}
-              />
-            ) : (
-              <MediaTile
-                key={m.src}
-                media={m}
-                position={[PANEL_W / 2 - 6.5, PANEL_H / 2 - 6 - i * 8, 0.3]}
-                width={10}
-                accent={accentColor}
-                fadeRef={mediaFade}
-              />
-            ),
-          )}
+          {node.media.map((m, i) => (
+            <MediaTile
+              key={m.src}
+              media={m}
+              position={[PANEL_W / 2 - 6.5, PANEL_H / 2 - 6 - i * 8, 0.3]}
+              width={10}
+              accent={accentColor}
+              fadeRef={mediaFade}
+            />
+          ))}
         </Suspense>
       </group>
     </group>

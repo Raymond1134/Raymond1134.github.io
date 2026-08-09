@@ -24,8 +24,6 @@ const ABYSS = toLum('#49e0cf', 1)
 export default function GreatVault() {
   const mesh = useRef<THREE.Mesh>(null!)
   const quality = useStore((s) => s.quality)
-  const compact = useStore((s) => s.compact)
-  const tier: Quality = compact ? 'low' : quality
 
   const geometry = useMemo(() => {
     const g = new THREE.BufferGeometry()
@@ -44,7 +42,7 @@ export default function GreatVault() {
         vertexShader: vaultVert,
         fragmentShader: vaultFrag,
         defines: {
-          FLOOR_STEPS: FLOOR_STEPS[tier],
+          FLOOR_STEPS: FLOOR_STEPS[quality],
           PHONE_GRADE: NO_COMPOSER ? 1 : 0,
           DITHER_K: NO_COMPOSER ? 1.45 : 1.15,
         },
@@ -79,7 +77,7 @@ export default function GreatVault() {
         blendDstAlpha: THREE.OneFactor,
         toneMapped: false,
       }),
-    [tier],
+    [quality],
   )
   useEffect(() => () => material.dispose(), [material])
 

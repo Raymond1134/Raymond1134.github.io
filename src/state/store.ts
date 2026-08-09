@@ -74,12 +74,7 @@ export const useStore = create<State>((set, get) => ({
   phase: 'idle',
   travelClock: 0,
   travelCount: 0,
-  quality:
-    isCoarsePointer() && typeof innerWidth !== 'undefined' && Math.min(innerWidth, innerHeight) < 600
-      ? 'low'
-      : isCoarsePointer()
-        ? 'medium'
-        : 'high',
+  quality: isCoarsePointer() ? 'medium' : 'high',
   fx: 'full',
   reducedMotion: typeof matchMedia !== 'undefined' && matchMedia('(prefers-reduced-motion: reduce)').matches,
   audioEnabled: false,

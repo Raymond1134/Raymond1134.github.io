@@ -145,7 +145,7 @@ export default function CameraRig() {
     else input.dolly -= input.dolly * (1 - Math.pow(0.02, dt))
 
     const current = getCurrentNode()
-    const panel = panelSizeFor(s.compact, s.portrait)
+    const panel = panelSizeFor(s.portrait)
     const dist = anchorDistance(camera, panel.w, panel.h * (1 + 2 * PANEL_LIFT)) + PANEL_Z + input.dolly
 
     const idleTarget = s.phase === 'idle' ? 1 : 0

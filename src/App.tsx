@@ -9,7 +9,6 @@ import SeoContent from '@/ui/SeoContent'
 import FirstHint from '@/ui/FirstHint'
 import OvertureSkip from '@/ui/OvertureSkip'
 import SoundHint from '@/ui/SoundHint'
-import BeaconSheet from '@/ui/BeaconSheet'
 import CursorWisp from '@/ui/CursorWisp'
 import Weave from '@/ui/Weave'
 import BeaconTabStops from '@/ui/BeaconTabStops'
@@ -137,7 +136,6 @@ export default function App() {
       <AudioBridge />
       <BatterySaver />
       {!textMode && <Weave />}
-      {!textMode && <BeaconSheet />}
       {!textMode && overture && <OvertureSkip />}
       {!textMode && !overture && <FirstHint />}
       {!textMode && !overture && <SoundHint />}

@@ -3,9 +3,8 @@ interface PanelSize {
   h: number
 }
 
-export function panelSizeFor(compact: boolean, portrait: boolean): PanelSize {
-  if (compact) return { w: 20, h: 13 }
-  if (portrait) return { w: 22, h: 24 }
+export function panelSizeFor(portrait: boolean): PanelSize {
+  if (portrait) return { w: 26, h: 20 }
   return { w: 30, h: 17 }
 }
 

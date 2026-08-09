@@ -46,6 +46,7 @@ const DEEP_TINT = new THREE.Color('#233252')
 const WHITE = new THREE.Color('#ffffff')
 const dirSelf = new THREE.Vector3()
 const dirCur = new THREE.Vector3()
+const projLbl = new THREE.Vector3()
 
 const CLICK_BLUE = new THREE.Color(CLICK_BLUE_HEX)
 const CLICK_BLUE_DEEP = new THREE.Color(CLICK_BLUE_DEEP_HEX)
@@ -396,9 +397,20 @@ export default function Beacon({ node, role }: Props) {
       if (role !== 'current') {
         const cur = st.graph.nodes.get(st.currentId)
         if (cur) {
-          dirSelf.copy(node.worldPosition).sub(state.camera.position).normalize()
-          dirCur.copy(cur.worldPosition).sub(state.camera.position).normalize()
-          o *= 1 - 0.85 * THREE.MathUtils.smoothstep(dirSelf.dot(dirCur), 0.985, 0.998) * (1 - h)
+          if (coarse && st.portrait) {
+            projLbl.copy(node.worldPosition).project(state.camera)
+            if (projLbl.z < 1) {
+              const fx = 1 - THREE.MathUtils.smoothstep(Math.abs(projLbl.x), 0.75, 1.05)
+              const fy =
+                (1 - THREE.MathUtils.smoothstep(projLbl.y, 0.8, 1.1)) *
+                THREE.MathUtils.smoothstep(projLbl.y, -0.75, -0.4)
+              o *= 1 - 0.95 * fx * fy * (1 - h)
+            }
+          } else {
+            dirSelf.copy(node.worldPosition).sub(state.camera.position).normalize()
+            dirCur.copy(cur.worldPosition).sub(state.camera.position).normalize()
+            o *= 1 - 0.85 * THREE.MathUtils.smoothstep(dirSelf.dot(dirCur), 0.985, 0.998) * (1 - h)
+          }
         }
       }
       label.current.visible = o > 0.01

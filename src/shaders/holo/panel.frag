@@ -32,7 +32,7 @@ void main() {
   float breathe = 0.86 + 0.14 * uBreath;
 
   float alpha = veil * edgeFade * breathe * uOpacity;
-  vec3 col = uColor * (0.6 + veil * 2.2 + glow * 1.2);
+  vec3 col = uColor * (0.6 + veil * 2.2 + glow * 1.5);
 
   col = gelTint(col, (p.x - p.y) * 0.10 + uTime * 0.13, 0.10);
 

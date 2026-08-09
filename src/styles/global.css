@@ -99,8 +99,6 @@ button {
 .hud .hud-chip:focus-visible,
 .weave-list .weave-row:focus-visible,
 .weave-close:focus-visible,
-.sheet-grabber:focus-visible,
-.sheet-links a:focus-visible,
 .shortcuts-panel button:focus-visible {
   box-shadow: 0 0 0 5px rgba(3, 5, 14, 0.85);
 }
