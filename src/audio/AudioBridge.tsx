@@ -1,7 +1,7 @@
 import { useEffect } from 'react'
 import { useStore } from '@/state/store'
 import {
-  audioLive,
+  audioRunning,
   disposeAudio,
   restoreAudioPreference,
   setAudioEnabled,
@@ -25,11 +25,15 @@ export default function AudioBridge() {
 
     const unlock = () => {
       unlockAudio()
-      if (!audioLive()) return
+      if (!audioRunning()) return
       removeEventListener('pointerdown', unlock)
+      removeEventListener('pointerup', unlock)
+      removeEventListener('click', unlock)
       removeEventListener('keydown', unlock)
     }
     addEventListener('pointerdown', unlock, { passive: true })
+    addEventListener('pointerup', unlock, { passive: true })
+    addEventListener('click', unlock)
     addEventListener('keydown', unlock)
 
     const onVisibility = () => setPageHidden(document.hidden)
@@ -47,6 +51,8 @@ export default function AudioBridge() {
 
     return () => {
       removeEventListener('pointerdown', unlock)
+      removeEventListener('pointerup', unlock)
+      removeEventListener('click', unlock)
       removeEventListener('keydown', unlock)
       document.removeEventListener('visibilitychange', onVisibility)
       unsub()

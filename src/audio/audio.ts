@@ -97,6 +97,7 @@ export const restoreAudioPreference = () => {
 }
 
 export const audioLive = () => engine !== null
+export const audioRunning = () => engine !== null && engine.ctx.state === 'running'
 export const audioEnabledNow = () => enabled && !hidden
 
 export const noiseBuffer = (c: AudioContext) => brownNoise(c)
@@ -293,7 +294,9 @@ export const setAudioEnabled = (on: boolean) => {
 }
 
 export const unlockAudio = () => {
-  if (enabled && !engine) start(false)
+  if (!enabled) return
+  if (!engine) start(false)
+  else if (engine.ctx.state !== 'running') engine.ctx.resume().catch(() => {})
 }
 
 export const tryEagerStart = () => {
