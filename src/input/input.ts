@@ -1,3 +1,4 @@
+import * as THREE from 'three'
 import { isCoarsePointer } from '@/device'
 import { LAMBDA } from '@/motion/tokens'
 
@@ -174,8 +175,10 @@ export function recentre() {
 }
 
 const DEG = Math.PI / 180
-const GYRO_GAIN = 0.75
+const GYRO_GAIN = 1
 const GYRO_MAX = 0.55
+const GYRO_TILT = new THREE.Quaternion(-Math.SQRT1_2, 0, 0, Math.SQRT1_2)
+const ZEE = new THREE.Vector3(0, 0, 1)
 
 let detachGyro: (() => void) | null = null
 
@@ -202,23 +205,26 @@ export function disableGyro() {
 function attachGyro() {
   if (detachGyro) return
 
-  let base: { roll: number; tip: number } | null = null
+  const euler = new THREE.Euler(0, 0, 0, 'YXZ')
+  const qNow = new THREE.Quaternion()
+  const qScreen = new THREE.Quaternion()
+  const qRel = new THREE.Quaternion()
+  const rel = new THREE.Euler(0, 0, 0, 'YXZ')
+  let base: THREE.Quaternion | null = null
   const smoothed = { x: 0, y: 0 }
 
   const onOrient = (e: DeviceOrientationEvent) => {
     if (e.beta === null || e.gamma === null) return
-    const a = (screen.orientation?.angle ?? 0) * DEG
-    const c = Math.cos(a)
-    const s = Math.sin(a)
-    const roll = e.gamma * c + e.beta * s
-    const tip = e.beta * c - e.gamma * s
-    if (!base) base = { roll, tip }
+    euler.set(e.beta * DEG, (e.alpha ?? 0) * DEG, -e.gamma * DEG)
+    qNow.setFromEuler(euler)
+    qNow.multiply(GYRO_TILT)
+    qNow.multiply(qScreen.setFromAxisAngle(ZEE, -(screen.orientation?.angle ?? 0) * DEG))
+    if (!base) base = qNow.clone()
+    qRel.copy(base).invert().multiply(qNow)
+    rel.setFromQuaternion(qRel)
 
-    const yaw = clamp((roll - base.roll) * DEG * GYRO_GAIN, -GYRO_MAX, GYRO_MAX)
-    const pitch = clamp((tip - base.tip) * DEG * GYRO_GAIN, -GYRO_MAX, GYRO_MAX)
-
-    smoothed.x += (yaw - smoothed.x) * 0.12
-    smoothed.y += (pitch - smoothed.y) * 0.12
+    smoothed.x += (clamp(rel.y * GYRO_GAIN, -GYRO_MAX, GYRO_MAX) - smoothed.x) * 0.18
+    smoothed.y += (clamp(rel.x * GYRO_GAIN, -GYRO_MAX, GYRO_MAX) - smoothed.y) * 0.18
     input.gyro = smoothed
   }
 
