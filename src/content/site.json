@@ -21,8 +21,7 @@
       "links": [
         { "label": "Email", "url": "mailto:raymond.zheng1@uwaterloo.ca", "icon": "mail" },
         { "label": "LinkedIn", "url": "https://linkedin.com/in/zraymond", "icon": "linkedin" },
-        { "label": "GitHub", "url": "https://github.com/Raymond1134", "icon": "github" },
-        { "label": "Instagram", "url": "https://instagram.com/raymondzheng1134", "icon": "instagram" }
+        { "label": "GitHub", "url": "https://github.com/Raymond1134", "icon": "github" }
       ],
       "children": ["work", "projects", "about", "contact"]
     },
@@ -177,7 +176,7 @@
       "title": "About",
       "subtitle": "The short version",
       "color": "#ffd98f",
-      "body": "I'm a computer science student at the University of Waterloo, in the co-op program. Right now I'm most interested in machine learning systems: kernels, autograd, attention, the machinery underneath the frameworks.\n\nOutside of code, I swimm, and I've run everything from coding classes to campus events.",
+      "body": "I'm a computer science student at the University of Waterloo, in the co-op program. Right now I'm most interested in machine learning systems: kernels, autograd, attention, the machinery underneath the frameworks.\n\nOutside of code, I swim, cook, and plan out campus events.",
       "children": ["education", "skills"]
     },
     {
@@ -207,7 +206,6 @@
         { "label": "437-986-6118", "url": "tel:+14379866118", "icon": "phone" },
         { "label": "LinkedIn", "url": "https://linkedin.com/in/zraymond", "icon": "linkedin" },
         { "label": "GitHub", "url": "https://github.com/Raymond1134", "icon": "github" },
-        { "label": "Instagram", "url": "https://instagram.com/raymondzheng1134", "icon": "instagram" }
       ]
     }
   ]
