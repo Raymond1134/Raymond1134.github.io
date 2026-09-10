@@ -32,11 +32,11 @@
       "subtitle": "Where I've worked",
       "color": "#ffb361",
       "body": "AI video startup, IT support for the Government of Ontario, event planning for Waterloo's Computer Science Committee, a coding school I founded, a chinese restaurant, and the YMCA.",
-      "children": ["viewmax", "ontario", "wcsc", "bytequest", "china-china-palace", "ymca"]
+      "children": ["everygen", "ontario", "wcsc", "bytequest", "china-china-palace", "ymca"]
     },
     {
-      "id": "viewmax",
-      "title": "ViewMax",
+      "id": "everygen",
+      "title": "EveryGen",
       "subtitle": "AI video generation · California · ongoing",
       "color": "#ffd166",
       "body": "I develop Python tooling and machine learning pipelines to orchestrate AI models for audio and video generation.\n\nI also evaluate the outputs of our tools to improve the consistency and quality of AI-generated media.",
