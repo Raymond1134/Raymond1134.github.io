@@ -48,6 +48,7 @@ let dollySign = 1
 let lastInteraction = typeof performance !== 'undefined' ? performance.now() : 0
 let lastPX = 0
 let lastPY = 0
+let pinchLatch = false
 
 const recentring = { on: false }
 
@@ -58,37 +59,54 @@ export const stillFor = () =>
   (performance.now() - lastInteraction) / 1000
 
 export function attachInput(el: HTMLElement): () => void {
+  const track = (e: PointerEvent, now: number) => {
+    const p = input.pointer
+    p.x = (e.clientX / Math.max(1, el.clientWidth)) * 2 - 1
+    p.y = -(e.clientY / Math.max(1, el.clientHeight)) * 2 + 1
+    p.movedAt = now
+    lastPX = e.clientX
+    lastPY = e.clientY
+  }
+
   const onDown = (e: PointerEvent) => {
+    const now = performance.now()
     active.set(e.pointerId, { id: e.pointerId, x: e.clientX, y: e.clientY, orbit: e.button === 2 })
     el.setPointerCapture?.(e.pointerId)
     recentring.on = false
     input.orbiting = active.size >= 2 || [...active.values()].some((t) => t.orbit)
+
+    if (e.isPrimary) {
+      input.pointer.speed = 0
+      track(e, now)
+    }
 
     if (active.size === 1) {
       startX = e.clientX
       startY = e.clientY
       input.dragDistance = 0
       input.dragging = true
-    } else if (active.size === 2) {
-      const [a, b] = [...active.values()]
-      pinchStart = gap(a, b)
-      dollyStart = input.dolly
-      dollySign = Math.cos(input.look.yaw) >= 0 ? 1 : -1
+    } else {
+      pinchLatch = true
+      input.pointer.active = false
+      if (active.size === 2) {
+        const [a, b] = [...active.values()]
+        pinchStart = gap(a, b)
+        dollyStart = input.dolly
+        dollySign = Math.cos(input.look.yaw) >= 0 ? 1 : -1
+      }
     }
-    lastInteraction = performance.now()
+    lastInteraction = now
   }
 
   const onMove = (e: PointerEvent) => {
     const now = performance.now()
     const p = input.pointer
-    const dtm = Math.max(1, now - p.movedAt)
-    p.speed = (Math.hypot(e.clientX - lastPX, e.clientY - lastPY) / dtm) * 1000
-    p.x = (e.clientX / Math.max(1, el.clientWidth)) * 2 - 1
-    p.y = -(e.clientY / Math.max(1, el.clientHeight)) * 2 + 1
-    p.movedAt = now
-    p.active = coarse ? active.size > 0 : true
-    lastPX = e.clientX
-    lastPY = e.clientY
+    if (e.isPrimary) {
+      const dtm = Math.max(1, now - p.movedAt)
+      p.speed = (Math.hypot(e.clientX - lastPX, e.clientY - lastPY) / dtm) * 1000
+      track(e, now)
+    }
+    p.active = pinchLatch ? false : coarse ? active.size === 1 : true
 
     const prev = active.get(e.pointerId)
     if (!prev) return
@@ -103,11 +121,13 @@ export function attachInput(el: HTMLElement): () => void {
     if (active.size === 2) {
       const [a, b] = [...active.values()]
       const d = gap(a, b)
-      if (pinchStart > 0) input.dolly = clamp(dollyStart + (d - pinchStart) * 0.06 * dollySign, -14, 16)
+      if (pinchStart > 0) input.dolly = clamp(dollyStart - (d - pinchStart) * 0.06 * dollySign, -14, 16)
       input.orbit.yaw -= dx * 0.5 * lookScale
       input.orbit.pitch = clamp(input.orbit.pitch + dy * 0.5 * lookScale, -1, 1)
       return
     }
+
+    if (pinchLatch) return
 
     if (prev.orbit) {
       input.orbit.yaw -= dx * lookScale
@@ -123,9 +143,15 @@ export function attachInput(el: HTMLElement): () => void {
     active.delete(e.pointerId)
     el.releasePointerCapture?.(e.pointerId)
     input.orbiting = active.size >= 2 || [...active.values()].some((t) => t.orbit)
+    if (active.size === 2) {
+      const [a, b] = [...active.values()]
+      pinchStart = gap(a, b)
+      dollyStart = input.dolly
+    }
     if (active.size === 0) {
       input.dragging = false
       pinchStart = 0
+      pinchLatch = false
       if (coarse) input.pointer.active = false
     }
   }
