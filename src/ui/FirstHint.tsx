@@ -3,14 +3,23 @@ import { useStore } from '@/state/store'
 import { input } from '@/input/input'
 import '@/styles/hint.css'
 
+const KEY = 'aether.first-hint'
 const HINT_MS = 9000
 const FADE_MS = 700
 const GRACE_MS = 1500
 const DRAG_PX = 14
 
+const seen = () => {
+  try {
+    return !!sessionStorage.getItem(KEY)
+  } catch {
+    return false
+  }
+}
+
 export default function FirstHint() {
   const coarse = useStore((s) => s.coarse)
-  const [mounted, setMounted] = useState(true)
+  const [mounted, setMounted] = useState(() => !seen())
 
   const [hiding, setHiding] = useState(false)
 
@@ -31,11 +40,18 @@ export default function FirstHint() {
       if (input.dragDistance > DRAG_PX) dismiss()
     }
 
+    const unsub = useStore.subscribe((s, prev) => {
+      if ((prev.phase === 'idle' && s.phase !== 'idle') || (s.mapOpen && !prev.mapOpen)) dismiss()
+    })
+
     let timer: ReturnType<typeof setTimeout> | undefined
     let graceTimer: ReturnType<typeof setTimeout> | undefined
 
     const start = () => {
       if (timer) return
+      try {
+        sessionStorage.setItem(KEY, '1')
+      } catch {}
       timer = setTimeout(dismiss, HINT_MS)
       graceTimer = setTimeout(() => {
         addEventListener('pointerup', onUp, { passive: true })
@@ -54,6 +70,7 @@ export default function FirstHint() {
     else document.addEventListener('visibilitychange', onVisible)
 
     return () => {
+      unsub()
       clearTimeout(timer)
       clearTimeout(graceTimer)
       clearTimeout(unmountTimer)

@@ -16,9 +16,13 @@ export default function Weave() {
   return <WeaveOverlay closing={!open} onGone={() => setRender(false)} />
 }
 
+const closeMap = () => {
+  const s = useStore.getState()
+  if (s.mapOpen) s.toggleMap()
+}
+
 function WeaveOverlay({ closing, onGone }: { closing: boolean; onGone: () => void }) {
   const compact = useStore((s) => s.compact)
-  const toggleMap = useStore((s) => s.toggleMap)
   const panelRef = useRef<HTMLDivElement>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
 
@@ -75,11 +79,11 @@ function WeaveOverlay({ closing, onGone }: { closing: boolean; onGone: () => voi
         if (e.animationName === 'weave-out') onGone()
       }}
     >
-      <div className="weave-backdrop" onPointerDown={toggleMap} />
+      <div className="weave-backdrop" onPointerDown={closeMap} />
       <div className="weave-panel" ref={panelRef} tabIndex={-1}>
         <header className="weave-head">
           <h2>The weave</h2>
-          <button className="weave-close" onClick={toggleMap} aria-label="Close the weave">
+          <button className="weave-close" onClick={closeMap} aria-label="Close the weave">
             ✕
           </button>
         </header>
@@ -165,7 +169,6 @@ function threadPath(a: Pt, b: Pt, k: number): string {
 function WeaveGraph() {
   const graph = useStore((s) => s.graph)
   const currentId = useStore((s) => s.currentId)
-  const toggleMap = useStore((s) => s.toggleMap)
   const { pts, threads } = useMemo(() => layout(graph), [graph])
 
   const colorOf = (id: string) => graph.nodes.get(id)?.color ?? BEACON_DEFAULT_COLOR
@@ -223,7 +226,7 @@ function WeaveGraph() {
               href={hrefFor(id)}
               aria-current={isCurrent ? 'page' : undefined}
               aria-label={isCurrent ? `${node.title}, you are here` : `Travel to ${node.title}`}
-              onClick={() => isCurrent && toggleMap()}
+              onClick={() => isCurrent && closeMap()}
             >
               <circle className="halo" r={18} filter="url(#weave-halo)" />
               <circle className="core" r={isCurrent ? 7 : 5} />

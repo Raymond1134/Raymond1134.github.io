@@ -70,6 +70,7 @@ export default function CursorWisp() {
     let motionK = 0
     let visible = false
     let aim = false
+    let aimEl = false
     let movedAt = 0
     let raf = 0
     let last = performance.now()
@@ -79,6 +80,7 @@ export default function CursorWisp() {
       const dt = Math.min((now - last) / 1000, 0.05)
       last = now
       const t = now / 1000
+      aim = aimEl || document.body.dataset.cursor === 'aim'
 
       visK += ((visible ? 1 : 0) - visK) * (1 - Math.exp(-dt * 10))
       aimK += ((aim ? 1 : 0) - aimK) * (1 - Math.exp(-dt * 12))
@@ -199,12 +201,12 @@ export default function CursorWisp() {
       visible = true
       movedAt = performance.now()
       const el = e.target as Element | null
-      aim = document.body.dataset.cursor === 'aim' || !!(el && el.closest && el.closest(AIM_TARGETS))
+      aimEl = !!(el && el.closest && el.closest(AIM_TARGETS))
     }
     const onDown = (e: PointerEvent) => {
       if (e.pointerType !== 'mouse' && e.pointerType !== 'pen') return
       movedAt = performance.now()
-      blooms.push({ x: e.clientX, y: e.clientY, age: 0, aim })
+      blooms.push({ x: e.clientX, y: e.clientY, age: 0, aim: aimEl || document.body.dataset.cursor === 'aim' })
       if (blooms.length > 6) blooms.shift()
     }
     const onLeave = () => {

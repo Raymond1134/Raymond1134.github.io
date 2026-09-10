@@ -137,8 +137,11 @@ export default function Hud() {
     if (textMode) return
     const id = setInterval(() => {
       const s = useStore.getState()
-      const away = awayOffset() > 0.35
-      setGhost(s.phase === 'idle' && !s.mapOpen && away && stillFor() > 4)
+      if (s.phase !== 'idle' || s.mapOpen || s.overtureActive) {
+        setGhost(false)
+        return
+      }
+      setGhost(awayOffset() > 0.35 && stillFor() > 4)
     }, 400)
     return () => clearInterval(id)
   }, [textMode])

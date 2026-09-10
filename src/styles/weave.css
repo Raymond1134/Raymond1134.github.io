@@ -35,7 +35,7 @@
 .weave-head h2 {
   margin: 0;
   font-size: 15px;
-  font-weight: 500;
+  font-weight: 600;
   letter-spacing: 0.04em;
   color: #9db8dc;
 }
@@ -161,6 +161,7 @@
 }
 
 
+.weave[data-closing] { pointer-events: none; }
 .weave[data-closing] .weave-backdrop { animation: weave-veil-out 260ms ease both; }
 .weave[data-closing] .weave-panel { animation: weave-out 260ms cubic-bezier(0.22, 1, 0.36, 1) both; }
 @keyframes weave-out { to { opacity: 0; transform: translateY(8px); } }

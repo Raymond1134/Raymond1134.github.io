@@ -7,10 +7,10 @@ export function useViewport() {
     const update = () => {
       const w = innerWidth
       const h = innerHeight
-      useStore.getState().setViewport({
-        portrait: h > w,
-        compact: isCoarsePointer() && Math.min(w, h) < 600,
-      })
+      const portrait = h > w
+      const compact = isCoarsePointer() && Math.min(w, h) < 600
+      const s = useStore.getState()
+      if (s.portrait !== portrait || s.compact !== compact) s.setViewport({ portrait, compact })
     }
 
     update()

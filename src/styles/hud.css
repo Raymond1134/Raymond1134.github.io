@@ -124,7 +124,10 @@
 
 @media (prefers-reduced-motion: reduce) {
   .hud,
-  .hud-chip { transition: none; }
+  .hud-chip,
+  .hud-ghost { transition: none; }
+  .hud-chip[data-invite],
+  .hud-ghost { animation: none; }
 }
 
 
@@ -149,7 +152,9 @@
   animation: ghost-in 400ms ease both;
   transition: opacity var(--dur-quick, 220ms) ease;
 }
-.hud-ghost:hover { opacity: 0.9; }
+@media (hover: hover) {
+  .hud-ghost:hover { opacity: 0.9; }
+}
 @keyframes ghost-in { from { opacity: 0; } }
 
 @keyframes hud-invite { 0%, 100% { box-shadow: none; } 50% { box-shadow: 0 0 22px rgba(255, 217, 160, 0.45); } }
