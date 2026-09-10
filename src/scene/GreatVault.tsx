@@ -44,7 +44,7 @@ export default function GreatVault() {
         defines: {
           FLOOR_STEPS: FLOOR_STEPS[quality],
           PHONE_GRADE: NO_COMPOSER ? 1 : 0,
-          DITHER_K: NO_COMPOSER ? 1.45 : 1.15,
+          DITHER_K: 1.1,
         },
         uniforms: {
           uProjInv: { value: new THREE.Matrix4() },

@@ -5,16 +5,22 @@ float aetherCurve(float x) {
   return (x * (x + B)) / (x * (x + D) + E);
 }
 
+vec3 aetherSplit(vec3 g) {
+  float l = dot(g, vec3(0.2126, 0.7152, 0.0722));
+  vec3 tone = mix(vec3(0.965, 0.99, 1.06), vec3(1.04, 1.0, 0.945), smoothstep(0.06, 0.55, l));
+  return g * mix(tone, vec3(1.0), smoothstep(0.62, 0.95, l));
+}
+
 vec3 aetherGrade(vec3 c, float exposure, float hold) {
   c = max(c * exposure, vec3(0.0));
   vec3 perCh = vec3(aetherCurve(c.r), aetherCurve(c.g), aetherCurve(c.b));
   float l = dot(c, vec3(0.2126, 0.7152, 0.0722));
   vec3 hue = clamp(aetherCurve(l) * (c / max(l, 1e-5)), 0.0, 1.0);
-  return mix(perCh, hue, hold);
+  return aetherSplit(mix(perCh, hue, hold));
 }
 
 float aetherVignette(vec2 fc, vec2 res, float strength) {
-  vec2 n = (fc / res - 0.5) * vec2(res.x / max(res.y, 1.0), 1.0);
+  vec2 n = (fc / res - 0.5) * res / max(min(res.x, res.y), 1.0);
   return mix(1.0, 1.0 - 0.34 * smoothstep(0.30, 1.05, length(n)), strength);
 }
 

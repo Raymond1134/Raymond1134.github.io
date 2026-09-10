@@ -12,7 +12,7 @@ import { DEPTHS_ORDER } from './renderOrder'
 import { NO_COMPOSER } from './composerPolicy'
 import { BEACON_DEFAULT_COLOR } from './beacons/palette'
 
-const DITHER_K = NO_COMPOSER ? 1.45 : 1.15
+const DITHER_K = 1.1
 
 const FALLOFF = 0.006
 

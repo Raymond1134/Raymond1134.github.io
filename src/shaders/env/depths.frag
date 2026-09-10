@@ -115,11 +115,10 @@ void main() {
 
   col = softClamp(col, uEnvSourcedClamp);
 
-  col = bandBreak3(col, gl_FragCoord.xy, 0.0, DITHER_K);
-
 #if PHONE_GRADE
   col = aetherGrade(col, uExposure, PHONE_HOLD);
   col *= aetherVignette(gl_FragCoord.xy, uResolution, 1.0);
+  col = bandBreak3(col, gl_FragCoord.xy, 0.0, DITHER_K);
 #endif
 
   gl_FragColor = vec4(col, 1.0);
