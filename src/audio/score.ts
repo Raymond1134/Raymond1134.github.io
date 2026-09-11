@@ -1,14 +1,17 @@
+import { Vector3 } from 'three'
 import { BREATH_HZ, breathState } from '@/scene/breath'
-import { TRAVEL_LANDING } from '@/state/store'
+import { worldEvents } from '@/scene/worldEvents'
+import { TRAVEL_LANDING, useStore } from '@/state/store'
 import {
-  engine, mix, BED, MASTER, later, clearTimer, noiseBuffer, estClock, audioEnabledNow,
+  engine, mix, BED, MASTER, later, clearTimer, noiseBuffer, estClock, audioEnabledNow, audioWanted,
+  outputDelay,
 } from './audio'
 import { struck, sub, BELL, BELL_MAJOR, GLASS } from './timbre'
+import { noteOf, arrivalChord, tonesOf, branchOf, HEXATONIC } from './harmony'
+import { placement, locate } from './voices'
+import { graph } from '@/content'
 
 const masterDuck = () => MASTER * 0.55
-import { noteOf, arrivalChord, tonesOf, branchOf, HEXATONIC } from './harmony'
-import { placement } from './voices'
-import { graph } from '@/content'
 
 type Timer = ReturnType<typeof setTimeout>
 let chimeTimer: Timer | null = null
@@ -82,6 +85,10 @@ const nextChime = (delayS: number) => {
     () => {
       const e = engine
       if (!e || !audioEnabledNow()) return
+      if (e.ctx.state !== 'running') {
+        nextChime(7 + Math.random() * 9)
+        return
+      }
       const src = pickSource(currentIdHint || graph.rootId)
       const exhale = timeToExhale(estClock())
       chime(
@@ -118,15 +125,34 @@ export const startChimes = () => {
 }
 
 let reprised = false
+let igniteOwed = false
+
 export const confirmBloom = (currentId: string) => {
   if (!engine) return
+  igniteOwed = false
   if (reprised) {
     const t = engine.ctx.currentTime
     chime(t + 0.02, noteOf(currentId).hover, 0.05, 2.5, panOf(currentId))
     return
   }
-  reprised = true
-  playIgnition(currentId, 0.62)
+  if (playIgnition(currentId, 0.62)) reprised = true
+}
+
+export const repayIgnition = () => {
+  if (!igniteOwed) return
+  igniteOwed = false
+  later(() => {
+    const s = useStore.getState()
+    if (reprised || s.phase !== 'idle') return
+    if (s.textMode) {
+      igniteOwed = true
+      return
+    }
+    if (playIgnition(s.currentId, 0.55)) {
+      reprised = true
+      worldEvents.soundGlintAt = performance.now()
+    }
+  }, 240)
 }
 
 export const farewell = () => {
@@ -167,7 +193,11 @@ const arrive = (destId: string, when: number, peakScale = 1) => {
 
 export const playIgnition = (id: string, scale = 1) => {
   const e = engine
-  if (!e || !audioEnabledNow() || e.ctx.state !== 'running') return
+  if (!e || !audioEnabledNow() || e.ctx.state !== 'running') {
+    if (audioWanted() && !reprised) igniteOwed = true
+    return false
+  }
+  igniteOwed = false
   const t = e.ctx.currentTime + 0.02
   const root = noteOf(id).drone
 
@@ -195,6 +225,7 @@ export const playIgnition = (id: string, scale = 1) => {
   bed.gain.setValueAtTime(bed.gain.value, t)
   bed.gain.linearRampToValueAtTime(BED * 1.45, hit + 0.9)
   bed.gain.setTargetAtTime(BED, hit + 2.2, 1.1)
+  return true
 }
 
 export const playEmber = (id: string) => {
@@ -215,13 +246,16 @@ export const playResolve = (id: string) => {
   })
 }
 
+let landed = true
+
 export const playPassage = (destId: string | null) => {
+  landed = !destId
   const e = engine
   if (!e || !audioEnabledNow() || e.ctx.state !== 'running') return
 
   const t = e.ctx.currentTime
   mix.passageUntil = t + 2.6
-  mix.bedBusyUntil = performance.now() + 2600
+  mix.bedBusyUntil = performance.now() + (TRAVEL_LANDING + 2.9) * 1000
 
   const src = e.ctx.createBufferSource()
   src.buffer = noiseBuffer(e.ctx)
@@ -266,9 +300,6 @@ export const playPassage = (destId: string | null) => {
     ladder.slice(0, 3).forEach((hz, i) => {
       chime(t + 0.4 + i * 0.35, hz, peaks[i] ?? 0.05, 2.8, panOf(destId))
     })
-
-    const latency = Math.min(0.25, e.ctx.outputLatency || 0)
-    arrive(destId, t + Math.max(0.2, TRAVEL_LANDING - latency))
   }
 
   const bed = e.bedGain
@@ -277,6 +308,24 @@ export const playPassage = (destId: string | null) => {
   bed.gain.linearRampToValueAtTime(0.1, t + 0.3)
   bed.gain.linearRampToValueAtTime(BED * 1.30, t + TRAVEL_LANDING + 0.25)
   bed.gain.setTargetAtTime(BED, t + TRAVEL_LANDING + 0.9, 0.9)
+}
+
+export const approachLanding = (id: string, remaining: number) => {
+  if (landed) return
+  const e = engine
+  if (!e || !audioEnabledNow() || e.ctx.state !== 'running') return
+  const lead = outputDelay(e.ctx)
+  if (remaining > lead + 0.04) return
+  landed = true
+  arrive(id, e.ctx.currentTime + Math.max(0.01, remaining - lead))
+}
+
+export const playLanding = (id: string) => {
+  if (landed) return
+  landed = true
+  const e = engine
+  if (!e || !audioEnabledNow() || e.ctx.state !== 'running') return
+  arrive(id, e.ctx.currentTime + 0.01)
 }
 
 export const condensedArrival = (destId: string) => {
@@ -298,7 +347,8 @@ export const playPicardy = (id: string) => {
 
   const t = e.ctx.currentTime + 0.02
   const root = noteOf(id).drone
-  mix.bedBusyUntil = performance.now() + 6000
+  mix.bedBusyUntil = performance.now() + 8000
+  mix.airBusyUntil = performance.now() + 9000
 
   bell(t, root, 0.34, 11.0, 0, true)
   bell(t + 0.09, root * 1.5, 0.20, 8.0, -0.2, true)
@@ -357,20 +407,23 @@ export const playUi = (kind: UiSound) => {
 
 export const playHearthFlare = (id: string, visualDur: number) => {
   const e = engine
-  if (!e || !audioEnabledNow()) return
+  if (!e || !audioEnabledNow() || e.ctx.state !== 'running') return
   const when = e.ctx.currentTime + Math.max(0.05, visualDur / 2 - 0.2)
   bell(when, noteOf(id).drone * 2, 0.12 * gainAt(id), 6.5, panOf(id))
 }
 
-export const playMigration = (fromId: string, toId: string, dur: number) => {
+const along = new Vector3()
+
+export const playMigration = (from: Vector3, to: Vector3, dur: number) => {
   const e = engine
-  if (!e || !audioEnabledNow()) return
+  if (!e || !audioEnabledNow() || e.ctx.state !== 'running') return
   const t = e.ctx.currentTime
-  const p0 = panOf(fromId)
-  const p1 = panOf(toId)
   const grains = 9
   for (let i = 0; i < grains; i++) {
-    const at = t + (i / grains) * dur + Math.random() * 0.3
+    const k = i / grains
+    const at = t + k * dur + Math.random() * 0.3
+    const here = locate(along.copy(from).lerp(to, k))
+    const peak = 0.012 * (0.7 + 0.6 * here.g)
     const src = e.ctx.createBufferSource()
     src.buffer = noiseBuffer(e.ctx)
     src.loop = true
@@ -380,10 +433,10 @@ export const playMigration = (fromId: string, toId: string, dur: number) => {
     bp.Q.value = 6
     const g = e.ctx.createGain()
     g.gain.setValueAtTime(0.0001, at)
-    g.gain.exponentialRampToValueAtTime(0.012, at + 0.09)
+    g.gain.exponentialRampToValueAtTime(peak, at + 0.09)
     g.gain.exponentialRampToValueAtTime(0.0001, at + 0.5)
     const p = e.ctx.createStereoPanner()
-    p.pan.value = p0 + (p1 - p0) * (i / (grains - 1))
+    p.pan.value = here.pan
     src.connect(bp).connect(g).connect(p).connect(e.chimeBus)
     src.start(at)
     src.stop(at + 0.6)
@@ -398,7 +451,7 @@ export const playMigration = (fromId: string, toId: string, dur: number) => {
 
 export const playAuroraVeil = (dur: number) => {
   const e = engine
-  if (!e || !audioEnabledNow()) return
+  if (!e || !audioEnabledNow() || e.ctx.state !== 'running') return
   const t = e.ctx.currentTime
   for (const [hz, cents] of [
     [220, -3],
@@ -423,7 +476,7 @@ export const playAuroraVeil = (dur: number) => {
 
 export const playDeepBreath = () => {
   const e = engine
-  if (!e || !audioEnabledNow()) return
+  if (!e || !audioEnabledNow() || e.ctx.state !== 'running') return
   const t = e.ctx.currentTime
   const period = 1 / BREATH_HZ
   const o = e.ctx.createOscillator()
@@ -443,7 +496,7 @@ export const playDeepBreath = () => {
 
 export const playClerestory = (dur: number) => {
   const e = engine
-  if (!e || !audioEnabledNow()) return
+  if (!e || !audioEnabledNow() || e.ctx.state !== 'running') return
   const t = e.ctx.currentTime
   const tones = tonesOf(branchOf(currentIdHint || graph.rootId))
   for (let i = 0; i < 3; i++) {
@@ -454,7 +507,7 @@ export const playClerestory = (dur: number) => {
 
 export const playSwellEvent = (dur: number) => {
   const e = engine
-  if (!e || !audioEnabledNow()) return
+  if (!e || !audioEnabledNow() || e.ctx.state !== 'running') return
   const t = e.ctx.currentTime
   mix.bedLpBusyUntil = performance.now() + (dur + 1.5) * 1000
   const f = e.bedLp.frequency
@@ -467,7 +520,7 @@ export const playSwellEvent = (dur: number) => {
 
 export const playQuake = () => {
   const e = engine
-  if (!e || !audioEnabledNow()) return
+  if (!e || !audioEnabledNow() || e.ctx.state !== 'running') return
   const t = e.ctx.currentTime + 0.02
   const root = noteOf(currentIdHint || graph.rootId).drone
   let f = root / 4
@@ -478,7 +531,7 @@ export const playQuake = () => {
 
 export const playToll = () => {
   const e = engine
-  if (!e || !audioEnabledNow()) return
+  if (!e || !audioEnabledNow() || e.ctx.state !== 'running') return
   const t = e.ctx.currentTime
   const root = noteOf(currentIdHint || graph.rootId).drone
   bell(t + 0.05, root * 4, 0.055, 9, Math.random() * 0.8 - 0.4)
@@ -487,6 +540,8 @@ export const playToll = () => {
 export const resetScore = () => {
   stopChimes()
   reprised = false
+  igniteOwed = false
+  landed = true
   picardyDone = false
   mix.passageUntil = 0
   mix.lastPing = 0

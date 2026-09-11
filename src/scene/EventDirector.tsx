@@ -264,8 +264,7 @@ export default function EventDirector() {
       cam.getWorldDirection(worldEvents.attractor.pos)
       ev.from.copy(cam.position).addScaledVector(worldEvents.attractor.pos, 40).addScaledVector(dir, -55)
       ev.to.copy(ev.from).addScaledVector(dir, 110)
-      const ids = [...s.graph.nodes.keys()]
-      playMigration(ids[(Math.random() * ids.length) | 0], ids[(Math.random() * ids.length) | 0], DUR.migration)
+      playMigration(ev.from, ev.to, DUR.migration)
     } else if (kind === 'aurora') {
       worldEvents.aurora.dir
         .set(Math.random() - 0.5, 0.5 + Math.random() * 0.5, Math.random() - 0.5)

@@ -67,6 +67,7 @@ export interface Room {
 export function createRoom(ctx: AudioContext, out: AudioNode, rt60: number): Room {
   const send = ctx.createGain()
   const nodes: AudioNode[] = [send]
+  const timers = new Set<ReturnType<typeof setTimeout>>()
 
   let convolver: ConvolverNode | null = null
   let ret: GainNode | null = null
@@ -97,17 +98,24 @@ export function createRoom(ctx: AudioContext, out: AudioNode, rt60: number): Roo
       if (oldC && oldR) {
         oldR.gain.setTargetAtTime(0, ctx.currentTime, 0.17)
         const id = setTimeout(() => {
+          timers.delete(id)
           try {
             send.disconnect(oldC)
           } catch {}
           oldC.disconnect()
           oldR.disconnect()
+          for (const nd of [oldC, oldR]) {
+            const i = nodes.indexOf(nd)
+            if (i >= 0) nodes.splice(i, 1)
+          }
         }, 900)
-        void id
+        timers.add(id)
       }
       attach(rt, true)
     },
     dispose: () => {
+      for (const id of timers) clearTimeout(id)
+      timers.clear()
       for (const nd of nodes) nd.disconnect()
     },
   }

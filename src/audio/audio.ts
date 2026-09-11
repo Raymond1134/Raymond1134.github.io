@@ -8,7 +8,9 @@ import { createVoices } from './voices'
 import type { VoicePool } from './voices'
 import { createTide } from './tide'
 import type { TideCtl } from './tide'
-import { startChimes, stopChimes, confirmBloom, farewell, resetScore, picardyReady } from './score'
+import {
+  startChimes, stopChimes, confirmBloom, repayIgnition, farewell, resetScore, picardyReady,
+} from './score'
 import { brownNoise, blueNoise, forgetNoise, forgetWaves } from './timbre'
 import { worldEvents } from '@/scene/worldEvents'
 
@@ -49,13 +51,13 @@ export const mix = {
   lastPingId: '',
   bedBusyUntil: 0,
   bedLpBusyUntil: 0,
+  airBusyUntil: 0,
   clock: { t: 0, at: typeof performance !== 'undefined' ? performance.now() : 0 },
   tier: 'high' as Quality,
 }
 
 export const estClock = () => mix.clock.t + (performance.now() - mix.clock.at) / 1000
 
-let oscs: OscillatorNode[] = []
 let nodes: AudioNode[] = []
 let moveSrc: AudioBufferSourceNode | null = null
 let airSrc: AudioBufferSourceNode | null = null
@@ -63,6 +65,8 @@ let airSrc: AudioBufferSourceNode | null = null
 let enabled = false
 let hidden = false
 let suspendTimer: Timer | null = null
+let startSeq = 0
+let resumeArmed = false
 
 const timers = new Set<Timer>()
 
@@ -99,6 +103,33 @@ export const restoreAudioPreference = () => {
 export const audioLive = () => engine !== null
 export const audioRunning = () => engine !== null && engine.ctx.state === 'running'
 export const audioEnabledNow = () => enabled && !hidden
+export const audioWanted = () => enabled
+
+export const outputDelay = (c: AudioContext) =>
+  Math.min(0.3, (c.baseLatency || 0) + (c.outputLatency || 0))
+
+const GESTURES = ['pointerdown', 'pointerup', 'click', 'keydown'] as const
+
+const resumeOnGesture = () => {
+  const e = engine
+  if (!e || !enabled || e.ctx.state === 'running') {
+    disarmResume()
+    return
+  }
+  if (!hidden) e.ctx.resume().catch(() => {})
+}
+
+const armResume = () => {
+  if (resumeArmed) return
+  resumeArmed = true
+  for (const k of GESTURES) addEventListener(k, resumeOnGesture, { passive: true })
+}
+
+const disarmResume = () => {
+  if (!resumeArmed) return
+  resumeArmed = false
+  for (const k of GESTURES) removeEventListener(k, resumeOnGesture)
+}
 
 export const noiseBuffer = (c: AudioContext) => brownNoise(c)
 
@@ -107,6 +138,10 @@ const build = (): Engine => {
   if (session) session.type = 'ambient'
 
   const c = new AudioContext({ latencyHint: 'playback' })
+  c.onstatechange = () => {
+    if (c.state === 'running') disarmResume()
+    else if (c.state !== 'closed' && enabled && !hidden) armResume()
+  }
   const boot = useStore.getState()
   const quality = boot.quality
   const compact = boot.compact
@@ -268,19 +303,30 @@ const fade = (to: number, dur: number) => {
 
 const start = (withBloom: boolean) => {
   const e = engine ?? build()
+  const seq = ++startSeq
   clearTimer(suspendTimer)
   suspendTimer = null
-  e.ctx.resume().catch(() => {})
   fade(MASTER, FADE_IN)
-  if (withBloom) confirmBloom(useStore.getState().currentId)
-  startChimes()
+  e.ctx
+    .resume()
+    .then(() => {
+      if (seq !== startSeq || engine !== e || !enabled || hidden) return
+      if (withBloom) confirmBloom(useStore.getState().currentId)
+      else repayIgnition()
+      startChimes()
+    })
+    .catch(() => {})
+  if (e.ctx.state !== 'running') armResume()
 }
 
 const stop = () => {
+  startSeq++
   stopChimes()
+  disarmResume()
   if (!engine) return
   farewell()
   fade(0, FADE_OUT)
+  clearTimer(suspendTimer)
   suspendTimer = later(() => {
     if (!enabled) engine?.ctx.suspend().catch(() => {})
   }, (FADE_OUT + 0.1) * 1000)
@@ -300,33 +346,37 @@ export const unlockAudio = () => {
 }
 
 export const tryEagerStart = () => {
-  if (!enabled || engine) return
-  try {
-    const probe = new AudioContext()
-    const open = probe.state === 'running'
-    probe.close().catch(() => {})
-    if (open) start(false)
-  } catch {}
+  if (!enabled || engine || hidden) return
+  const nav = navigator as Navigator & { getAutoplayPolicy?: (kind: string) => string }
+  const active = nav.userActivation?.hasBeenActive ?? false
+  if (active || nav.getAutoplayPolicy?.('audiocontext') === 'allowed') start(false)
 }
 
 export const setPageHidden = (h: boolean) => {
   hidden = h
   const e = engine
   if (!e || !enabled) return
+  const seq = ++startSeq
+  clearTimer(suspendTimer)
+  suspendTimer = null
 
   if (h) {
     stopChimes()
+    disarmResume()
     fade(0, 0.25)
     suspendTimer = later(() => {
       if (hidden) engine?.ctx.suspend().catch(() => {})
     }, 350)
     return
   }
-  clearTimer(suspendTimer)
-  suspendTimer = null
-  e.ctx.resume().catch(() => {})
   fade(MASTER, 1.2)
-  startChimes()
+  e.ctx
+    .resume()
+    .then(() => {
+      if (seq === startSeq && engine === e && enabled && !hidden) startChimes()
+    })
+    .catch(() => {})
+  if (e.ctx.state !== 'running') armResume()
 }
 
 const prevCam = new THREE.Vector3()
@@ -360,8 +410,9 @@ export const audioFrame = (t: number, camera: THREE.Camera) => {
     prevQuat.copy(camera.quaternion)
     camInit = true
   }
-  const v = camera.position.distanceTo(prevCam) / dt
-  const w = prevQuat.angleTo(camera.quaternion) / dt
+  const teleport = s.phase === 'fade'
+  const v = teleport ? 0 : camera.position.distanceTo(prevCam) / dt
+  const w = teleport ? 0 : prevQuat.angleTo(camera.quaternion) / dt
   prevCam.copy(camera.position)
   prevQuat.copy(camera.quaternion)
   const m = Math.min(1, v / 28 + (0.3 * w) / 2)
@@ -370,12 +421,14 @@ export const audioFrame = (t: number, camera: THREE.Camera) => {
   e.moveGain.gain.setTargetAtTime(gTarget, now, rising ? 0.15 : 0.5)
   e.moveBp.frequency.setTargetAtTime(350 + 550 * m, now, 0.2)
 
-  const airTarget = Math.max(
-    0.006,
-    Math.min(0.075, 0.014 * (0.78 + 0.44 * b) * (1 + 1.9 * worldEvents.grade.caustic)),
-  )
-  const airRising = airTarget > (e.airGain.gain.value as number)
-  e.airGain.gain.setTargetAtTime(airTarget, now, airRising ? 0.25 : 0.55)
+  if (performance.now() > mix.airBusyUntil) {
+    const airTarget = Math.max(
+      0.006,
+      Math.min(0.075, 0.014 * (0.78 + 0.44 * b) * (1 + 1.9 * worldEvents.grade.caustic)),
+    )
+    const airRising = airTarget > (e.airGain.gain.value as number)
+    e.airGain.gain.setTargetAtTime(airTarget, now, airRising ? 0.25 : 0.55)
+  }
 
   const force = s.phase !== 'idle' ? (s.pendingId ?? s.currentId) : null
   e.voices.update(camera, s.currentId, force, b)
@@ -391,14 +444,11 @@ export const disposeAudio = () => {
   for (const id of timers) clearTimeout(id)
   timers.clear()
   suspendTimer = null
+  startSeq++
+  disarmResume()
   resetScore()
 
-  for (const o of oscs) {
-    o.stop()
-    o.disconnect()
-  }
   for (const n of nodes) n.disconnect()
-  oscs = []
   nodes = []
   moveSrc?.stop()
   moveSrc?.disconnect()
@@ -416,7 +466,9 @@ export const disposeAudio = () => {
   mix.lastPing = 0
   mix.bedBusyUntil = 0
   mix.bedLpBusyUntil = 0
+  mix.airBusyUntil = 0
   if (e) {
+    e.ctx.onstatechange = null
     e.voices.dispose()
     e.room.dispose()
     e.tide.dispose()

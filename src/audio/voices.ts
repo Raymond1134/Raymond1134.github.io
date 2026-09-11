@@ -22,6 +22,17 @@ export const placement = new Map<string, { pan: number; g: number; d: number; be
 
 const inv = new Matrix4()
 const v = new Vector3()
+const probe = { pan: 0, g: 0, d: 0, behind: false }
+
+export const locate = (p: Vector3) => {
+  v.copy(p).applyMatrix4(inv)
+  const lateral = Math.sqrt(v.x * v.x + v.z * v.z)
+  probe.d = v.length()
+  probe.pan = Math.max(-0.85, Math.min(0.85, v.x / Math.max(1e-3, lateral)))
+  probe.g = 1 / (1 + Math.pow(probe.d / 40, 1.4))
+  probe.behind = v.z > 0
+  return probe
+}
 
 export interface VoicePool {
   update: (camera: THREE.Camera, currentId: string, forceId: string | null, breathVal: number) => void
@@ -74,15 +85,8 @@ export function createVoices(ctx: AudioContext, out: AudioNode, roomSend: AudioN
 
     placement.clear()
     for (const node of graph.nodes.values()) {
-      v.copy(node.worldPosition).applyMatrix4(inv)
-      const d = v.length()
-      const lateral = Math.sqrt(v.x * v.x + v.z * v.z)
-      placement.set(node.id, {
-        pan: Math.max(-0.85, Math.min(0.85, v.x / Math.max(1e-3, lateral))),
-        g: 1 / (1 + Math.pow(d / 40, 1.4)),
-        d,
-        behind: v.z > 0,
-      })
+      const p = locate(node.worldPosition)
+      placement.set(node.id, { pan: p.pan, g: p.g, d: p.d, behind: p.behind })
     }
 
     const desired: string[] = [currentId]
