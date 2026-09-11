@@ -29,25 +29,37 @@ varying float vReveal;
 varying float vGlint;
 varying float vPulse;
 varying float vPulseS;
+varying float vStretch;
+varying vec2  vAxis;
 
 void main() {
   vec2 c = gl_PointCoord - 0.5;
-  float r2 = dot(c, c) * 4.0;
+  float k = 1.0 - vStretch;
+  float h = 0.5 * vStretch;
+  float sa = dot(c, vAxis);
+  float streak = smoothstep(0.0, 0.3, vStretch);
+  float thin = 1.0 - 0.45 * smoothstep(0.0, 0.6, vStretch);
+  vec2 q = vec2(max(abs(sa) - h, 0.0), dot(c, vec2(-vAxis.y, vAxis.x)) / thin);
+  float r2 = dot(q, q) * 4.0 / (k * k);
   if (r2 > 1.0) discard;
+
+  float along = clamp((sa + h) / max(2.0 * h, 1e-4), 0.0, 1.0);
+  float taper = mix(1.0, 0.08 + 0.92 * along * along, streak);
 
   float isFly  = step(0.5, vClass) * (1.0 - step(1.5, vClass));
   float isMote = step(1.5, vClass);
   float isDust = 1.0 - isFly - isMote;
 
   float dustA = (exp(-r2 * 4.5) + exp(-r2 * 1.6) * 0.30) * (1.0 - r2);
+  float glowA = exp(-r2 * 3.0) * (1.0 - r2);
 
   float body = smoothstep(1.0, 0.62, r2);
   float rim  = (smoothstep(0.55, 0.9, r2) - smoothstep(0.9, 1.0, r2)) * 0.4 * vDefocus;
-  float flyA = body * 0.72 + rim;
+  float flyA = mix(body * 0.72 + rim, glowA * 0.9, streak);
 
-  float moteA = exp(-r2 * 1.1) * (1.0 - r2) * 0.45;
+  float moteA = mix(exp(-r2 * 1.1) * (1.0 - r2), glowA, streak) * 0.45;
 
-  float alpha = isDust * dustA + isFly * flyA + isMote * moteA;
+  float alpha = (isDust * dustA + isFly * flyA + isMote * moteA) * taper;
 
   float heat = smoothstep(0.0, uSpeedScale, vSpeed);
 
@@ -68,6 +80,8 @@ void main() {
   col = mix(col, mix(uColorCold, uColorMid, fract(vSeed * 3.77)), isMote);
 
   col = mix(col, vLitCol, vLit * 0.45);
+
+  col = mix(col, uColorAccent, streak * 0.4 * along * exp(-r2 * 2.5));
 
   col = gelTint(col, vSeed * 40.0 + uTime * 0.25, isFly * (0.16 + 0.26 * vDefocus) + isDust * 0.10);
   col = gelFringe(col, r2, isFly * (0.18 + 0.35 * vDefocus));

@@ -14,6 +14,11 @@ uniform vec3  uPulseOrigin;
 uniform float uPulseRadius;
 uniform float uPulseBand;
 uniform float uPulseGlow;
+uniform vec2  uResolution;
+uniform vec3  uCamVel;
+uniform float uStreak;
+uniform float uStreakCap;
+uniform float uPointMax;
 
 attribute vec2 aRef;
 
@@ -30,6 +35,10 @@ varying float vReveal;
 varying float vGlint;
 varying float vPulse;
 varying float vPulseS;
+varying float vStretch;
+varying vec2  vAxis;
+
+const float STREAK_T = 0.018;
 
 void main() {
   vec4 p = texture2D(uPositions, aRef);
@@ -72,7 +81,6 @@ void main() {
   float sizePx = size1 * (1.0 + isMote * (env - 0.5) * 0.12);
 
   float px = max(sizePx, 1.5 * uPixelRatio);
-  gl_PointSize = px;
   float tiny = min(1.0, (sizePx * sizePx) / (px * px));
 
   float grew = size1 / max(size0, 1e-3);
@@ -80,6 +88,26 @@ void main() {
   float defDim = 1.0 / pow(grew, 1.2);
 
   vFade = 1.0 - smoothstep(uFadeStart, uFadeEnd, length(p.xyz - uCenter));
+
+  vec2 axis = vec2(1.0, 0.0);
+  float L = 0.0;
+  if (uStreak > 0.001 && vFade > 0.02 && gl_Position.w > 0.05) {
+    vec4 c1 = projectionMatrix * (modelViewMatrix * vec4(p.xyz - (v - uCamVel) * STREAK_T, 1.0));
+    vec2 dpx = (gl_Position.xy / gl_Position.w - c1.xy / max(c1.w, 0.05)) * 0.5 * uResolution;
+    float dl = length(dpx);
+    L = min(dl * uStreak, min(uStreakCap * uPixelRatio, max(uPointMax - px, 0.0)));
+    if (L > 0.75) {
+      vec2 dir = dpx / dl;
+      axis = dir * vec2(1.0, -1.0);
+      gl_Position.xy -= dir * (L / uResolution) * gl_Position.w;
+    } else {
+      L = 0.0;
+    }
+  }
+  gl_PointSize = px + L;
+  vStretch = L / (px + L);
+  vAxis = axis;
+  float streakGain = pow(px / (px + 0.35 * L), 0.5);
 
   if (vFade <= 0.001) gl_Position = vec4(0.0, 0.0, 2.0, 1.0);
 
@@ -113,7 +141,7 @@ void main() {
     vPulseS = clamp((pd - uPulseRadius) / uPulseBand, -1.0, 1.0);
   }
 
-  vGain  = dim * breathe * defDim * voidGate * tiny;
+  vGain  = dim * breathe * defDim * voidGate * tiny * streakGain;
   vSpeed = length(v);
   vDepth = dist;
   vSeed  = seed;

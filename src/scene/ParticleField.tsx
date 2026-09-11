@@ -38,6 +38,8 @@ const LIGHT_RADIUS = 30
 const WAKE_DEPTH = 28
 const WAKE_CALM = CALM ? 0.35 : 1
 
+const STREAK_CAP = NO_COMPOSER ? 22 : 40
+
 const forceScale = 1 / (TAU * TAU)
 const damping = Math.pow(BASE.damping, 1 / TAU)
 
@@ -50,6 +52,9 @@ const handoff: {
   timer: ReturnType<typeof setTimeout> | null
   dying: FieldAssets | null
 } = { claimable: null, timer: null, dying: null }
+
+const camPrev = new THREE.Vector3()
+const camVel = new THREE.Vector3()
 
 const tmpV = new THREE.Vector3()
 const rayV = new THREE.Vector3()
@@ -84,8 +89,10 @@ function disposeAssets(a: FieldAssets) {
 function buildAssets(gl: THREE.WebGLRenderer, size: number, opacity: number): FieldAssets {
   const gpu = new GPUComputationRenderer(size, size, gl)
 
-  const canRenderFloat = gl.getContext().getExtension('EXT_color_buffer_float') !== null
+  const ctx = gl.getContext()
+  const canRenderFloat = ctx.getExtension('EXT_color_buffer_float') !== null
   if (!canRenderFloat) gpu.setDataType(THREE.HalfFloatType)
+  const pointRange = ctx.getParameter(ctx.ALIASED_POINT_SIZE_RANGE) as Float32Array | null
 
   const pos0 = gpu.createTexture()
   const vel0 = gpu.createTexture()
@@ -173,6 +180,10 @@ function buildAssets(gl: THREE.WebGLRenderer, size: number, opacity: number): Fi
       uPulseRadius: { value: -1e3 },
       uPulseBand: { value: 8 },
       uPulseGlow: { value: 0 },
+      uCamVel: { value: new THREE.Vector3() },
+      uStreak: { value: 0 },
+      uStreakCap: { value: STREAK_CAP },
+      uPointMax: { value: pointRange ? pointRange[1] : 64 },
       uColorCold: { value: new THREE.Color(site.meta.themeColorCold) },
       uColorMid: { value: new THREE.Color(site.meta.themeColorMid) },
       uColorHot: { value: new THREE.Color(site.meta.themeColorHot) },
@@ -266,8 +277,13 @@ export default function ParticleField() {
 
     if (!field.init) {
       field.center.copy(cam)
+      camPrev.copy(cam)
       field.init = true
     }
+    tmpV.copy(cam).sub(camPrev).divideScalar(Math.max(Math.min(rawDt, 1 / 20), 1e-3))
+    camVel.lerp(tmpV, 1 - Math.exp(-dt / 0.05))
+    camPrev.copy(cam)
+    const ft = THREE.MathUtils.clamp((s.travelClock - TRAVEL.turn) / TRAVEL.flight, 0, 1)
     const tau = s.phase === 'flight' ? 0.35 : 2.5
     field.center.lerp(cam, 1 - Math.exp(-dt / tau))
     tmpV.copy(field.center).sub(cam)
@@ -282,6 +298,10 @@ export default function ParticleField() {
     mu.uSize.value = SIZE_TIER[s.quality]
     state.gl.getDrawingBufferSize(bufV)
     ;(mu.uResolution.value as THREE.Vector2).copy(bufV)
+
+    const streakT = CALM || s.phase !== 'flight' ? 0 : Math.pow(Math.sin(ft * Math.PI), 0.8)
+    mu.uStreak.value = THREE.MathUtils.damp(mu.uStreak.value as number, streakT, LAMBDA.quick, dt)
+    ;(mu.uCamVel.value as THREE.Vector3).copy(camVel)
 
     mu.uReveal.value = worldEvents.reveal
     ;(mu.uRevealOrigin.value as THREE.Vector3).copy(worldEvents.revealOrigin)
@@ -353,7 +373,6 @@ export default function ParticleField() {
           if (travelDir.current.lengthSq() > 1e-6) travelDir.current.normalize()
         }
         ;(vu.uTravelDir.value as THREE.Vector3).copy(travelDir.current)
-        const ft = THREE.MathUtils.clamp((s.travelClock - TRAVEL.turn) / TRAVEL.flight, 0, 1)
         vu.uTravelBoost.value = Math.pow(Math.sin(ft * Math.PI), 1.5) * 26
       } else {
         vu.uTravelBoost.value = 0
