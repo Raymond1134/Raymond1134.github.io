@@ -19,6 +19,8 @@ import { ATMOSPHERE_ORDER } from '@/scene/renderOrder'
 import { worldEvents } from '@/scene/worldEvents'
 import { LUM, AERIAL_K, DOME_STOPS } from '@/scene/lightPyramid'
 import { NO_COMPOSER } from '@/scene/composerPolicy'
+import { panelSizeFor, PANEL_Z, PANEL_LIFT } from '@/scene/ui3d/panelLayout'
+import { LAMBDA } from '@/motion/tokens'
 import { BEACON_DEFAULT_COLOR, CLICK_BLUE as CLICK_BLUE_HEX, CLICK_BLUE_DEEP as CLICK_BLUE_DEEP_HEX } from './palette'
 import type { Quality } from '@/state/store'
 
@@ -40,16 +42,69 @@ const PHONE_GLOW_COMP = NO_COMPOSER ? 1.25 : 1
 
 const MOTE_TIER: Record<Quality, number> = { low: 300, medium: 500, high: 800, ultra: 800 }
 const ATMO_OPACITY = 0.045
+
+const CALM = useStore.getState().reducedMotion
+
 const LABEL_REST = 0.92
+const LABEL_Y = -2.6
+const LABEL_RISE = CALM ? 0 : 0.55
+const LABEL_HOVER_LIFT = CALM ? 0 : 0.2
+const LABEL_HOVER_SCALE = CALM ? 0 : 0.08
+const LABEL_STAGGER = 0.35
+const LABEL_LEAD = 0.06
 
 const DEEP_TINT = new THREE.Color('#233252')
 const WHITE = new THREE.Color('#ffffff')
 const dirSelf = new THREE.Vector3()
 const dirCur = new THREE.Vector3()
-const projLbl = new THREE.Vector3()
+const camRight = new THREE.Vector3()
+const camUp = new THREE.Vector3()
+const camBack = new THREE.Vector3()
+const probeA = new THREE.Vector3()
+const probeB = new THREE.Vector3()
+const lblCenter = new THREE.Vector3()
 
 const CLICK_BLUE = new THREE.Color(CLICK_BLUE_HEX)
 const CLICK_BLUE_DEEP = new THREE.Color(CLICK_BLUE_DEEP_HEX)
+const LABEL_BASE = CLICK_BLUE.clone().lerp(WHITE, 0.62)
+
+const PANEL_INSET_X = 1.4
+const PANEL_INSET_Y = 0.4
+const panelRect = { stamp: -1, on: false, x: 0, y: 0, hx: 0, hy: 0 }
+
+function measurePanel(camera: THREE.Camera, center: THREE.Vector3, portrait: boolean, stamp: number) {
+  if (panelRect.stamp === stamp) return panelRect
+  panelRect.stamp = stamp
+  const { w, h } = panelSizeFor(portrait)
+  camRight.set(1, 0, 0).applyQuaternion(camera.quaternion)
+  camUp.set(0, 1, 0).applyQuaternion(camera.quaternion)
+  camBack.set(0, 0, 1).applyQuaternion(camera.quaternion)
+  probeA.copy(center).addScaledVector(camUp, h * PANEL_LIFT).addScaledVector(camBack, PANEL_Z)
+  probeB.copy(probeA).addScaledVector(camRight, w / 2).addScaledVector(camUp, h / 2)
+  probeA.project(camera)
+  probeB.project(camera)
+  panelRect.on = probeA.z < 1
+  panelRect.x = probeA.x
+  panelRect.y = probeA.y
+  panelRect.hx = Math.abs(probeB.x - probeA.x) * (1 - (2 * PANEL_INSET_X) / w)
+  panelRect.hy = Math.abs(probeB.y - probeA.y) * (1 - (2 * PANEL_INSET_Y) / h)
+  return panelRect
+}
+
+function labelOverPanel(camera: THREE.Camera, center: THREE.Vector3, halfW: number, halfH: number) {
+  if (!panelRect.on) return 0
+  probeB.copy(center).addScaledVector(camRight, halfW).addScaledVector(camUp, halfH).project(camera)
+  probeA.copy(center).project(camera)
+  if (probeA.z > 1) return 0
+  const lhx = Math.abs(probeB.x - probeA.x)
+  const lhy = Math.abs(probeB.y - probeA.y)
+  const gx = Math.abs(probeA.x - panelRect.x) - panelRect.hx - lhx
+  const gy = Math.abs(probeA.y - panelRect.y) - panelRect.hy - lhy
+  return (
+    (1 - THREE.MathUtils.smoothstep(gx, -lhx, 0.01)) *
+    (1 - THREE.MathUtils.smoothstep(gy, -lhy, 0.01))
+  )
+}
 
 const QUAD = new THREE.PlaneGeometry(2, 2)
 QUAD.boundingSphere = new THREE.Sphere(new THREE.Vector3(), 1e5)
@@ -68,6 +123,12 @@ const CRYSTAL_GEO = (() => {
 interface Props {
   node: GraphNode
   role: 'current' | 'reachable' | 'distant'
+}
+
+interface TroikaLabel {
+  fillOpacity: number
+  outlineOpacity: number
+  textRenderInfo?: { blockBounds: number[] } | null
 }
 
 interface BeaconAssets {
@@ -215,6 +276,9 @@ export default function Beacon({ node, role }: Props) {
   const hit = useRef<THREE.Mesh>(null!)
   const label = useRef<THREE.Group>(null)
   const labelText = useRef<THREE.Mesh>(null)
+  const labelT = useRef(0)
+  const idleAt = useRef(0)
+  const wasIdle = useRef(false)
   const hoverT = useRef(0)
   const hovered = useStore((s) => s.hoveredId === node.id)
   const setHovered = useStore((s) => s.setHovered)
@@ -246,7 +310,8 @@ export default function Beacon({ node, role }: Props) {
     [color],
   )
 
-  const labelColor = useMemo(() => CLICK_BLUE.clone().lerp(WHITE, 0.62), [])
+  const labelColor = useMemo(() => LABEL_BASE.clone(), [])
+  const labelDelay = useMemo(() => LABEL_LEAD + hash01(node.id, 9) * LABEL_STAGGER, [node.id])
 
   const haloCore = useMemo(() => {
     if (role === 'reachable') return CLICK_BLUE.clone().lerp(WHITE, 0.16)
@@ -389,36 +454,49 @@ export default function Beacon({ node, role }: Props) {
 
     hit.current.scale.setScalar(THREE.MathUtils.clamp(d * TAP_TARGET_FACTOR, 6, 46))
 
-    if (label.current) {
-      label.current.scale.setScalar(Math.max(1.1, Math.pow(d, 0.85) * 0.055))
+    const idleNow = st.phase === 'idle'
+    if (idleNow && !wasIdle.current) idleAt.current = t
+    wasIdle.current = idleNow
 
-      let o = phase === 'idle' ? (coarse ? 1 : LABEL_REST + (1 - LABEL_REST) * h) : 0
+    if (label.current) {
+      const want = idleNow && t - idleAt.current > labelDelay ? 1 : 0
+      labelT.current = THREE.MathUtils.damp(
+        labelT.current,
+        want,
+        want > labelT.current ? LAMBDA.ease : LAMBDA.snap,
+        dt,
+      )
+      const lt = labelT.current
+      const ls = Math.max(1.1, Math.pow(d, 0.85) * 0.055)
+      label.current.scale.setScalar(ls * (1 + LABEL_HOVER_SCALE * h))
+      labelColor.copy(LABEL_BASE).lerp(WHITE, 0.4 * h)
+
+      let o = (coarse ? 1 : LABEL_REST + (1 - LABEL_REST) * h) * lt
       o *= (1 - 0.45 * THREE.MathUtils.smoothstep(d, 120, 300)) * adm
-      if (role !== 'current') {
+      const lm = labelText.current
+      if (lm) {
+        const tt = lm as unknown as TroikaLabel
+        const ly = LABEL_Y - (1 - lt) * LABEL_RISE + h * LABEL_HOVER_LIFT
+        lm.position.y = ly
         const cur = st.graph.nodes.get(st.currentId)
-        if (cur) {
-          if (coarse && st.portrait) {
-            projLbl.copy(node.worldPosition).project(state.camera)
-            if (projLbl.z < 1) {
-              const fx = 1 - THREE.MathUtils.smoothstep(Math.abs(projLbl.x), 0.75, 1.05)
-              const fy =
-                (1 - THREE.MathUtils.smoothstep(projLbl.y, 0.8, 1.1)) *
-                THREE.MathUtils.smoothstep(projLbl.y, -0.75, -0.4)
-              o *= 1 - 0.95 * fx * fy * (1 - h)
-            }
-          } else {
-            dirSelf.copy(node.worldPosition).sub(state.camera.position).normalize()
-            dirCur.copy(cur.worldPosition).sub(state.camera.position).normalize()
-            o *= 1 - 0.85 * THREE.MathUtils.smoothstep(dirSelf.dot(dirCur), 0.985, 0.998) * (1 - h)
+        if (cur && o > 0.01) {
+          if (worldEvents.panelDim > 0.01) {
+            measurePanel(state.camera, cur.worldPosition, st.portrait, t)
+            const bb = tt.textRenderInfo?.blockBounds
+            const halfW = bb ? (bb[2] - bb[0]) / 2 : node.title.length * 0.33
+            const halfH = bb ? (bb[3] - bb[1]) / 2 : 0.55
+            lblCenter.copy(node.worldPosition).addScaledVector(camUp, (ly - halfH) * ls)
+            const over = labelOverPanel(state.camera, lblCenter, halfW * ls, halfH * ls)
+            o *= 1 - over * worldEvents.panelDim * (1 - h)
           }
+          dirSelf.copy(node.worldPosition).sub(state.camera.position).normalize()
+          dirCur.copy(cur.worldPosition).sub(state.camera.position).normalize()
+          o *= 1 - 0.85 * THREE.MathUtils.smoothstep(dirSelf.dot(dirCur), 0.985, 0.998) * (1 - h)
         }
-      }
-      label.current.visible = o > 0.01
-      if (labelText.current) {
-        const tt = labelText.current as unknown as { fillOpacity: number; outlineOpacity: number }
         tt.fillOpacity = o
         tt.outlineOpacity = o * 0.85
       }
+      label.current.visible = o > 0.01
     }
   })
 
@@ -432,12 +510,18 @@ export default function Beacon({ node, role }: Props) {
           e.stopPropagation()
           setHovered(node.id)
         }}
+        onPointerMove={(e) => {
+          if (!canHoverPointer || !interactive) return
+          e.stopPropagation()
+          if (useStore.getState().hoveredId !== node.id) setHovered(node.id)
+        }}
         onPointerOut={() => {
           if (!canHoverPointer) return
           if (useStore.getState().hoveredId !== node.id) return
           setHovered(null)
         }}
         onPointerUp={(e) => {
+          if (e.button !== 0) return
           if (input.dragDistance > TAP_SLOP) return
           if (role !== 'reachable') return
           e.stopPropagation()
@@ -480,7 +564,9 @@ export default function Beacon({ node, role }: Props) {
         <Billboard ref={label}>
           <Text
             ref={labelText}
-            position={[0, -2.6, 0]}
+            position={[0, LABEL_Y - LABEL_RISE, 0]}
+            fillOpacity={0}
+            outlineOpacity={0}
             fontSize={0.92}
             letterSpacing={0.12}
             color={labelColor}
