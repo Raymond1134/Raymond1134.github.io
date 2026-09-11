@@ -5,8 +5,10 @@ import './styles/global.css'
 import App from './App.tsx'
 import TextMode from './ui/TextMode.tsx'
 
-const PRELOAD_CHARS = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 .,—·:/()'
+const PRELOAD_CHARS =
+  'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 .,—–-·:;/()’\'"&|$+!?#@%'
 preloadFont({ font: '/fonts/Inter-Regular.woff', characters: PRELOAD_CHARS }, () => {})
+preloadFont({ font: '/fonts/Inter-SemiBold.woff', characters: PRELOAD_CHARS }, () => {})
 
 const hasWebGL2 = () => {
   try {

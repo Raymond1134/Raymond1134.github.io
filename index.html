@@ -12,13 +12,68 @@
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <style>
+      #overture-shroud {
+        position: fixed;
+        inset: 0;
+        z-index: 60;
+        background: #03040a;
+        opacity: 1;
+        transition: opacity 1.5s cubic-bezier(0.22, 1, 0.36, 1);
+        pointer-events: none;
+      }
+      #overture-shroud::before,
+      #overture-shroud::after {
+        content: '';
+        position: absolute;
+        left: 50%;
+        top: 50%;
+        border-radius: 50%;
+        opacity: 0;
+      }
+      #overture-shroud::after {
+        width: 10px;
+        height: 10px;
+        margin: -5px 0 0 -5px;
+        background: #fff2dd;
+        box-shadow:
+          0 0 4px 1px rgba(255, 242, 221, 0.95),
+          0 0 18px 6px rgba(255, 217, 160, 0.55),
+          0 0 48px 16px rgba(255, 184, 122, 0.16),
+          0 0 120px 44px rgba(138, 92, 230, 0.14);
+        animation:
+          shroud-kindle 0.9s ease-out 0.35s both,
+          shroud-breathe 2.6s ease-in-out 1.25s infinite;
+      }
+      #overture-shroud::before {
+        width: 240px;
+        height: 240px;
+        margin: -120px 0 0 -120px;
+        border: 1px solid rgba(255, 217, 160, 0.16);
+        animation: shroud-ripple 5.2s cubic-bezier(0.22, 1, 0.36, 1) 1.25s infinite;
+      }
+      @keyframes shroud-kindle {
+        from { opacity: 0 }
+        to { opacity: 0.9 }
+      }
+      @keyframes shroud-breathe {
+        0%, 100% { opacity: 0.9; transform: scale(1) }
+        50% { opacity: 0.36; transform: scale(0.8) }
+      }
+      @keyframes shroud-ripple {
+        0% { opacity: 0; transform: scale(0.05) }
+        14% { opacity: 1 }
+        100% { opacity: 0; transform: scale(1) }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        #overture-shroud::after { animation: shroud-kindle 0.9s ease-out 0.35s both }
+        #overture-shroud::before { display: none }
+      }
+    </style>
     <title>Raymond Zheng</title>
   </head>
   <body>
-    <div
-      id="overture-shroud"
-      style="position: fixed; inset: 0; z-index: 60; background: #03040a; opacity: 1; transition: opacity 0.9s ease; pointer-events: none"
-    ></div>
+    <div id="overture-shroud"></div>
     <noscript><style>#overture-shroud { display: none; }</style></noscript>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>

@@ -77,7 +77,7 @@ export default function App() {
         }}
         camera={{ fov: 62, near: 0.1, far: 4000, position: [0, 0, 26] }}
         onCreated={({ gl }) => {
-          gl.setClearColor(new THREE.Color('#030410'), 1)
+          gl.setClearColor(new THREE.Color('#03040a'), 1)
           gl.toneMapping = THREE.NoToneMapping
 
           const ctx = gl.getContext()

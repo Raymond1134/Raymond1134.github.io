@@ -8,6 +8,7 @@ import { EASE, swell } from '@/motion/tokens'
 import { playEmber, playIgnition, playResolve } from '@/audio/score'
 
 const END = 8.0
+const SHROUD_FALLBACK_MS = 2200
 
 if (typeof document !== 'undefined') {
   worldEvents.reveal = 0
@@ -25,8 +26,12 @@ const dropShroud = (instant = false) => {
     el.remove()
     return
   }
+  const gone = () => el.remove()
+  el.addEventListener('transitionend', (e) => {
+    if (e.propertyName === 'opacity' && !e.pseudoElement) gone()
+  })
   el.style.opacity = '0'
-  setTimeout(() => el.remove(), 950)
+  requestAnimationFrame(() => setTimeout(gone, SHROUD_FALLBACK_MS))
 }
 
 export default function OvertureDirector() {
@@ -34,6 +39,8 @@ export default function OvertureDirector() {
   const beaconsReady = useStore((s) => s.beaconsReady)
   const calm = useStore((s) => s.reducedMotion)
   const compact = useStore((s) => s.compact)
+  const active = useStore((s) => s.overtureActive)
+  const textMode = useStore((s) => s.textMode)
 
   const started = useRef(false)
   const t0 = useRef(-1)
@@ -47,6 +54,7 @@ export default function OvertureDirector() {
   const mountedAt = useRef(-1)
 
   useEffect(() => {
+    if (!active) return
     const skip = () => {
       if (vt.current > 0.4) rate.current = 4
     }
@@ -58,11 +66,15 @@ export default function OvertureDirector() {
       removeEventListener('keydown', skip)
       removeEventListener('wheel', skip)
     }
-  }, [])
+  }, [active])
 
   useEffect(() => {
     useStore.getState().setOvertureActive(true)
   }, [])
+
+  useEffect(() => {
+    if (textMode) dropShroud()
+  }, [textMode])
 
   useFrame((state, dt) => {
     if (done.current) return
@@ -74,7 +86,7 @@ export default function OvertureDirector() {
       if (!ready && t - mountedAt.current < 4) return
       started.current = true
       t0.current = t
-      dropShroud()
+      if (calm) dropShroud()
       const s = useStore.getState()
       const origin = calm
         ? state.camera.position
@@ -99,6 +111,7 @@ export default function OvertureDirector() {
     } else {
       if (!embered.current && tau >= 0.5) {
         embered.current = true
+        dropShroud()
         playEmber(useStore.getState().currentId)
       }
       if (tau < 3.6) {
