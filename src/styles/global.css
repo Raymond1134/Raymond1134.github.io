@@ -96,10 +96,23 @@ button {
 :focus-visible { outline: 2px solid var(--aether); outline-offset: 2px; }
 :focus:not(:focus-visible) { outline: none; }
 
-.hud .hud-chip:focus-visible,
 .weave-close:focus-visible,
 .shortcuts-panel button:focus-visible {
   box-shadow: 0 0 0 5px rgba(3, 5, 14, 0.85);
+}
+
+.hud .hud-chip:focus-visible,
+.hud-ghost:focus-visible {
+  outline: none;
+  box-shadow:
+    0 0 0 2px color-mix(in srgb, var(--hud-accent, #ffd9a0) 80%, #fff),
+    0 0 0 6px rgba(3, 5, 14, 0.85),
+    0 0 22px color-mix(in srgb, var(--hud-accent, #ffd9a0) 45%, transparent);
+}
+
+@media (forced-colors: active) {
+  .hud .hud-chip:focus-visible,
+  .hud-ghost:focus-visible { outline: 2px solid CanvasText; }
 }
 
 a.weave-node:focus-visible .hit { stroke: var(--aether); stroke-width: 3.5; }

@@ -39,6 +39,7 @@ export default function Hud() {
 
   const parentId = graph.nodes.get(currentId)?.parentId ?? null
   const idle = phase === 'idle'
+  const accent = { '--hud-accent': graph.nodes.get(currentId)?.color ?? BEACON_DEFAULT_COLOR } as CSSProperties
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -162,16 +163,15 @@ export default function Hud() {
         className="hud"
         aria-label="Site controls"
         data-dimmed={phase === 'turn' || phase === 'flight' || overture}
-        style={
-          {
-            '--hud-accent': graph.nodes.get(currentId)?.color ?? BEACON_DEFAULT_COLOR,
-          } as CSSProperties
-        }
+        style={accent}
       >
-        {!textMode && <Chip glyph="✦" label="Map" pressed={mapOpen} invite={mapInvite} onClick={toggleMap} />}
+        {!textMode && (
+          <Chip kind="map" glyph="✦" label="Map" pressed={mapOpen} invite={mapInvite} onClick={toggleMap} />
+        )}
 
         {!textMode && (
           <Chip
+            kind="back"
             glyph="↩"
             label="Back"
             disabled={!parentId}
@@ -180,6 +180,7 @@ export default function Hud() {
         )}
 
         <Chip
+          kind="sound"
           glyph="♪"
           label="Sound"
           pressed={audioEnabled}
@@ -191,17 +192,20 @@ export default function Hud() {
         />
 
         {coarse && gyroAvailable() && (
-          <Chip glyph="◎" label="Tilt" pressed={gyroEnabled} onClick={onTilt} />
+          <Chip kind="tilt" glyph="◎" label="Tilt" pressed={gyroEnabled} onClick={onTilt} />
         )}
 
-        <Chip glyph="≡" label="Text" pressed={textMode} onClick={toggleTextMode} />
+        <Chip kind="text" glyph="≡" label="Text" pressed={textMode} onClick={toggleTextMode} />
 
-        {!textMode && <Chip glyph="?" label={coarse ? 'Help' : 'Keys'} onClick={toggleShortcuts} />}
+        {!textMode && (
+          <Chip kind="help" glyph="?" label={coarse ? 'Help' : 'Keys'} onClick={toggleShortcuts} />
+        )}
       </nav>
 
       {!textMode && ghost && (
         <button
           className="hud-ghost"
+          style={accent}
           onClick={() => {
             recentre()
             playUi('recentre')
@@ -220,6 +224,7 @@ export default function Hud() {
 }
 
 function Chip({
+  kind,
   glyph,
   label,
   pressed,
@@ -227,6 +232,7 @@ function Chip({
   invite,
   onClick,
 }: {
+  kind?: string
   glyph: ReactNode
   label: string
   pressed?: boolean
@@ -242,6 +248,7 @@ function Chip({
       aria-pressed={pressed}
       data-on={pressed || undefined}
       data-invite={invite || undefined}
+      data-kind={kind}
     >
       <span className="glyph" aria-hidden>
         {glyph}
