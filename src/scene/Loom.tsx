@@ -24,7 +24,24 @@ const CLICK_HUE = toLum(CLICK_BLUE, 1)
 
 const CALM = useStore.getState().reducedMotion
 
+const REVEAL_FLASH = CALM ? 0 : 1.9
+
 const ORDER_IDX = new Map(useStore.getState().graph.order.map((id, i) => [id, i]))
+
+const frame = { t: 0, breath: 0.5, cur: 0 }
+
+function drive(m: THREE.Material | THREE.Material[] | undefined, gl: THREE.WebGLRenderer) {
+  if (!m || Array.isArray(m)) return
+  const u = (m as THREE.ShaderMaterial).uniforms
+  u.uTime.value = frame.t
+  u.uBreath.value = frame.breath
+  if (u.uPixelRatio) u.uPixelRatio.value = gl.getPixelRatio()
+  u.uCur.value = frame.cur
+  u.uReveal.value = worldEvents.reveal
+  ;(u.uRevealOrigin.value as THREE.Vector3).copy(worldEvents.revealOrigin)
+  u.uExposure.value = worldEvents.grade.exposure
+  gl.getDrawingBufferSize(u.uResolution.value as THREE.Vector2)
+}
 
 function buildGeometry(): THREE.BufferGeometry {
   const graph = useStore.getState().graph
@@ -231,6 +248,7 @@ export default function Loom() {
           uPkSpeed: { value: CALM ? 2 : 7 },
           uReveal: { value: 1 },
           uRevealOrigin: { value: new THREE.Vector3() },
+          uRevealFlash: { value: REVEAL_FLASH },
           uThreadL: { value: LUM.thread },
           uPulseL: { value: LUM.threadPulse },
           uCold: { value: THREAD_HUE },
@@ -260,6 +278,7 @@ export default function Loom() {
           uPkSpeed: { value: CALM ? 2 : 7 },
           uReveal: { value: 1 },
           uRevealOrigin: { value: new THREE.Vector3() },
+          uRevealFlash: { value: REVEAL_FLASH * 1.6 },
           uHazeL: { value: LUM.threadHaze },
           uPulseL: { value: LUM.threadPulse * 0.3 },
           uCold: { value: HAZE_HUE },
@@ -283,24 +302,11 @@ export default function Loom() {
 
   useFrame((state) => {
     const t = state.clock.elapsedTime
-    const br = breath(t)
-    const cur = ORDER_IDX.get(useStore.getState().currentId) ?? 0
-    const mats = [
-      points.current?.material as THREE.ShaderMaterial | undefined,
-      haze.current?.material as THREE.ShaderMaterial | undefined,
-    ]
-    for (const m of mats) {
-      if (!m) continue
-      const u = m.uniforms
-      u.uTime.value = t
-      u.uBreath.value = br
-      if (u.uPixelRatio) u.uPixelRatio.value = state.gl.getPixelRatio()
-      u.uCur.value = cur
-      u.uReveal.value = worldEvents.reveal
-      ;(u.uRevealOrigin.value as THREE.Vector3).copy(worldEvents.revealOrigin)
-      u.uExposure.value = worldEvents.grade.exposure
-      state.gl.getDrawingBufferSize(u.uResolution.value as THREE.Vector2)
-    }
+    frame.t = t
+    frame.breath = breath(t)
+    frame.cur = ORDER_IDX.get(useStore.getState().currentId) ?? 0
+    drive(points.current?.material, state.gl)
+    drive(haze.current?.material, state.gl)
   })
 
   return (

@@ -4,6 +4,7 @@ uniform float uCur;
 uniform float uPkSpeed;
 uniform float uReveal;
 uniform vec3  uRevealOrigin;
+uniform float uRevealFlash;
 
 attribute vec3  aDir;
 attribute float aSide;
@@ -18,6 +19,7 @@ varying float vAcross;
 varying float vEnd;
 varying float vAdj;
 varying float vPulse;
+varying float vHot;
 varying float vGlow;
 varying vec3  vCol;
 
@@ -33,7 +35,9 @@ void main() {
   vec4 mv = modelViewMatrix * vec4(p, 1.0);
   float dist = max(-mv.z, 0.001);
   vec3 tv = mat3(modelViewMatrix) * aDir;
-  vec2 n = normalize(vec2(-tv.y, tv.x) + vec2(1e-5, 0.0));
+  vec2 sd = tv.xy * dist + mv.xy * tv.z;
+  float sl = length(sd);
+  vec2 n = sl > 1e-6 * dist ? vec2(-sd.y, sd.x) / sl : vec2(0.0, 1.0);
   float near = 1.0 - smoothstep(20.0, 180.0, dist);
   float hw = max(0.45, dist * 0.0024) * (1.0 + 1.3 * near);
   mv.xy += n * hw * aSide;
@@ -56,9 +60,13 @@ void main() {
         * sin(w * 0.11 + uTime * 0.5);
 
   float reveal = 1.0;
+  vHot = 0.0;
   if (uReveal < 1.0) {
     float front = uReveal * 380.0;
-    reveal = smoothstep(front, front - 14.0, distance(p, uRevealOrigin)) * step(0.001, uReveal);
+    float behind = front - distance(p, uRevealOrigin);
+    reveal = smoothstep(0.0, 14.0, behind) * step(0.001, uReveal);
+    float b = max(behind, 0.0);
+    vHot = uRevealFlash * (exp(-b / 40.0) + 0.35 * exp(-b / 110.0)) * (1.0 - smoothstep(0.84, 1.0, uReveal));
   }
 
   vEnd = smoothstep(2.5, 9.0, w)
@@ -66,6 +74,7 @@ void main() {
        * smoothstep(8.0, 22.0, dist)
        * min(1.0, pow(0.45 / hw, 0.6))
        * (1.0 - 0.45 * smoothstep(80.0, 280.0, dist))
+       * smoothstep(0.03, 0.12, sl / dist)
        * reveal;
 
   vCol = aCol;

@@ -15,6 +15,7 @@ varying float vDepth;
 varying float vEnd;
 varying float vAdj;
 varying float vPulse;
+varying float vHot;
 varying float vTw;
 varying vec3  vCol;
 
@@ -26,10 +27,10 @@ void main() {
 
   vec3 col = mix(uCold, vCol, 0.30);
   col = mix(col, uClick, vAdj * 0.45);
-  col = aerialCol(col, vDepth);
 
   float lum = uThreadL * (0.62 + 0.38 * vAdj) * vTw + uPulseL * vPulse;
-  col *= lum * (0.88 + 0.12 * uBreath);
+  col = col * lum + mix(vCol, vec3(1.0), 0.5) * (uPulseL * vHot);
+  col = aerialCol(col, vDepth) * (0.88 + 0.12 * uBreath);
 
   float a = disc * vEnd * aerialGain(vDepth);
 
