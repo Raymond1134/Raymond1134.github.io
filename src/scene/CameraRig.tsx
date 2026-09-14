@@ -3,10 +3,10 @@ import { useFrame, useThree } from '@react-three/fiber'
 import * as THREE from 'three'
 import { useStore, getCurrentNode, TRAVEL, FADE } from '@/state/store'
 import type { GraphNode } from '@/content/layout'
-import { input, attachInput, settleInput, setLookScale } from '@/input/input'
+import { input, attachInput, settleInput, coastInput, haltFling, setLookScale } from '@/input/input'
 import { breath, BREATH_HZ } from '@/scene/breath'
 import { worldEvents } from '@/scene/worldEvents'
-import { EASE, swellTight } from '@/motion/tokens'
+import { EASE, LAMBDA, swellTight } from '@/motion/tokens'
 import { playPicardy, picardyReady } from '@/audio/score'
 import { panelSizeFor, PANEL_Z, PANEL_LIFT } from '@/scene/ui3d/panelLayout'
 
@@ -30,6 +30,11 @@ const DRIFT_LAT = CALM ? 0 : 1.2
 const DRIFT_VERT = CALM ? 0 : 0.7
 const DRIFT_FWD = CALM ? 0.45 : 0.9
 const DRIFT_LOOK = CALM ? 0 : 0.004
+
+const PAR_X = CALM ? 0 : 1.2
+const PAR_Y = CALM ? 0 : 0.6
+const PAR_TILT_X = CALM ? 0 : 2.2
+const PAR_TILT_Y = CALM ? 0 : 1.6
 
 const ROLL_A = CALM ? 0 : 1.6 * (Math.PI / 180)
 const ROLL_B = CALM ? 0 : 0.7 * (Math.PI / 180)
@@ -131,6 +136,7 @@ export default function CameraRig() {
   const fadeSnapped = useRef(false)
 
   const driftOff = useRef(new THREE.Vector3())
+  const par = useRef(new THREE.Vector2())
   useEffect(() => attachInput(domElement), [domElement])
   useEffect(() => {
     setLookScale((2 * Math.tan(THREE.MathUtils.degToRad(camera.fov) / 2)) / Math.max(1, height))
@@ -141,6 +147,7 @@ export default function CameraRig() {
     s.tickTravel(Math.min(dt, 1 / 20))
     const t = state.clock.elapsedTime
 
+    coastInput(dt)
     if (s.phase === 'idle' || s.phase === 'fade') settleInput(dt)
     else input.dolly -= input.dolly * (1 - Math.pow(0.02, dt))
 
@@ -204,6 +211,7 @@ export default function CameraRig() {
       baseTowards(camera.position, dest, toQuat)
       camera.quaternion.copy(frozenQuat.current).slerp(toQuat, e)
 
+      haltFling()
       input.look.yaw = 0
       input.look.pitch = 0
       input.orbit.yaw = 0
@@ -270,6 +278,14 @@ export default function CameraRig() {
     camera.position.lerp(anchorFor(tmpB, current, dist, av), 1 - Math.pow(0.0015, dt))
     lookTarget.current.lerp(current.worldPosition, 1 - Math.pow(0.002, dt))
 
+    const gz = input.gaze
+    const gy = input.gyro
+    const aim = s.hover && gz.on && !input.dragging && !s.mapOpen
+    par.current.set(
+      THREE.MathUtils.damp(par.current.x, (aim ? gz.x * PAR_X : 0) + (gy ? gy.x * PAR_TILT_X : 0), LAMBDA.settle, dt),
+      THREE.MathUtils.damp(par.current.y, (aim ? gz.y * PAR_Y : 0) - (gy ? gy.y * PAR_TILT_Y : 0), LAMBDA.settle, dt),
+    )
+
     const k = idleT.current
     if (k > 0.001 || worldEvents.camForward !== 0) {
       driftRight.set(1, 0, 0).applyQuaternion(camera.quaternion)
@@ -281,8 +297,8 @@ export default function CameraRig() {
       const vert = DRIFT_VERT * Math.sin(2 * Math.PI * 0.017 * t + 0.9)
       const fwd = DRIFT_FWD * (breath(t) - 0.5) * 2 * 0.5
       driftOff.current
-        .addScaledVector(driftRight, lat * k)
-        .addScaledVector(driftUp, vert * k)
+        .addScaledVector(driftRight, (lat + par.current.x) * k)
+        .addScaledVector(driftUp, (vert + par.current.y) * k)
         .addScaledVector(driftFwd, (fwd * k + worldEvents.camForward))
       camera.position.add(driftOff.current)
     }

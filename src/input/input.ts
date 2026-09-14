@@ -14,6 +14,8 @@ const MAX_PITCH = Math.PI * 0.48
 
 const coarse = isCoarsePointer()
 
+const CALM = typeof matchMedia !== 'undefined' && matchMedia('(prefers-reduced-motion: reduce)').matches
+
 export const input = {
   look: { yaw: 0, pitch: 0 },
 
@@ -28,6 +30,8 @@ export const input = {
   orbiting: false,
 
   pointer: { x: 0, y: 0, active: false, speed: 0, movedAt: 0 },
+
+  gaze: { x: 0, y: 0, on: false },
 
   gyro: null as { x: number; y: number } | null
 }
@@ -52,11 +56,79 @@ let pinchLatch = false
 
 const recentring = { on: false }
 
+const FLING_LAMBDA = LAMBDA.ease
+const FLING_MAX = 2.4
+const FLING_STALE = 80
+const FLING_REST = 0.004
+
+const flick = { yaw: 0, pitch: 0, oyaw: 0, opitch: 0, at: 0 }
+const fling = { yaw: 0, pitch: 0, oyaw: 0, opitch: 0, at: 0, live: false }
+
 const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v))
 const gap = (a: Tracked, b: Tracked) => Math.hypot(a.x - b.x, a.y - b.y)
 
 export const stillFor = () =>
   (performance.now() - lastInteraction) / 1000
+
+export function haltFling() {
+  fling.yaw = 0
+  fling.pitch = 0
+  fling.oyaw = 0
+  fling.opitch = 0
+  fling.live = false
+}
+
+function primeFling(now: number) {
+  haltFling()
+  flick.yaw = 0
+  flick.pitch = 0
+  flick.oyaw = 0
+  flick.opitch = 0
+  flick.at = now
+  fling.at = now
+}
+
+function steer(yaw: number, pitch: number, oyaw: number, opitch: number, now: number) {
+  input.look.yaw += yaw
+  input.look.pitch = clamp(input.look.pitch + pitch, -MAX_PITCH, MAX_PITCH)
+  input.orbit.yaw += oyaw
+  input.orbit.pitch = clamp(input.orbit.pitch + opitch, -1, 1)
+
+  flick.yaw += yaw
+  flick.pitch += pitch
+  flick.oyaw += oyaw
+  flick.opitch += opitch
+  flick.at = now
+  const span = now - fling.at
+  if (span < 8) return
+  const k = 1 - Math.exp(-span / 40)
+  const rate = 1000 / span
+  fling.yaw += (flick.yaw * rate - fling.yaw) * k
+  fling.pitch += (flick.pitch * rate - fling.pitch) * k
+  fling.oyaw += (flick.oyaw * rate - fling.oyaw) * k
+  fling.opitch += (flick.opitch * rate - fling.opitch) * k
+  fling.at = now
+  flick.yaw = 0
+  flick.pitch = 0
+  flick.oyaw = 0
+  flick.opitch = 0
+}
+
+function release(now: number) {
+  const held = now - flick.at
+  if (CALM || input.dragDistance <= TAP_SLOP || held > FLING_STALE) {
+    haltFling()
+    return
+  }
+  const keep = Math.exp(-Math.max(0, held - 16) / 30)
+  const lk = keep * Math.min(1, FLING_MAX / Math.max(1e-6, Math.hypot(fling.yaw, fling.pitch)))
+  const ok = keep * Math.min(1, FLING_MAX / Math.max(1e-6, Math.hypot(fling.oyaw, fling.opitch)))
+  fling.yaw *= lk
+  fling.pitch *= lk
+  fling.oyaw *= ok
+  fling.opitch *= ok
+  fling.live = true
+}
 
 export function attachInput(el: HTMLElement): () => void {
   const track = (e: PointerEvent, now: number) => {
@@ -79,6 +151,8 @@ export function attachInput(el: HTMLElement): () => void {
       input.pointer.speed = 0
       track(e, now)
     }
+    if (e.pointerType === 'touch') input.gaze.on = false
+    primeFling(now)
 
     if (active.size === 1) {
       startX = e.clientX
@@ -105,6 +179,11 @@ export function attachInput(el: HTMLElement): () => void {
       const dtm = Math.max(1, now - p.movedAt)
       p.speed = (Math.hypot(e.clientX - lastPX, e.clientY - lastPY) / dtm) * 1000
       track(e, now)
+      if (e.pointerType !== 'touch') {
+        input.gaze.x = p.x
+        input.gaze.y = p.y
+        input.gaze.on = true
+      }
     }
     p.active = pinchLatch ? false : coarse ? active.size === 1 : true
 
@@ -122,21 +201,18 @@ export function attachInput(el: HTMLElement): () => void {
       const [a, b] = [...active.values()]
       const d = gap(a, b)
       if (pinchStart > 0) input.dolly = clamp(dollyStart - (d - pinchStart) * 0.06 * dollySign, -14, 16)
-      input.orbit.yaw -= dx * 0.5 * lookScale
-      input.orbit.pitch = clamp(input.orbit.pitch + dy * 0.5 * lookScale, -1, 1)
+      steer(0, 0, -dx * 0.5 * lookScale, dy * 0.5 * lookScale, now)
       return
     }
 
     if (pinchLatch) return
 
     if (prev.orbit) {
-      input.orbit.yaw -= dx * lookScale
-      input.orbit.pitch = clamp(input.orbit.pitch + dy * lookScale, -1, 1)
+      steer(0, 0, -dx * lookScale, dy * lookScale, now)
       return
     }
 
-    input.look.yaw += dx * lookScale
-    input.look.pitch = clamp(input.look.pitch + dy * lookScale, -MAX_PITCH, MAX_PITCH)
+    steer(dx * lookScale, dy * lookScale, 0, 0, now)
   }
 
   const onUp = (e: PointerEvent) => {
@@ -153,11 +229,16 @@ export function attachInput(el: HTMLElement): () => void {
       pinchStart = 0
       pinchLatch = false
       if (coarse) input.pointer.active = false
+      release(performance.now())
     }
   }
 
   const onLeave = () => {
     input.pointer.active = false
+  }
+
+  const onExit = () => {
+    input.gaze.on = false
   }
 
   const onWheel = (e: WheelEvent) => {
@@ -181,6 +262,7 @@ export function attachInput(el: HTMLElement): () => void {
   el.addEventListener('dblclick', onDouble)
   el.addEventListener('gesturestart', stopGesture)
   el.addEventListener('gesturechange', stopGesture)
+  document.documentElement.addEventListener('mouseleave', onExit)
 
   return () => {
     el.removeEventListener('contextmenu', stopGesture)
@@ -193,11 +275,13 @@ export function attachInput(el: HTMLElement): () => void {
     el.removeEventListener('dblclick', onDouble)
     el.removeEventListener('gesturestart', stopGesture)
     el.removeEventListener('gesturechange', stopGesture)
+    document.documentElement.removeEventListener('mouseleave', onExit)
   }
 }
 
 export function recentre() {
   recentring.on = true
+  haltFling()
 }
 
 const DEG = Math.PI / 180
@@ -267,6 +351,21 @@ function attachGyro() {
 }
 
 const LOOK_RETURN_AFTER = 45
+
+export function coastInput(dt: number) {
+  if (!fling.live || input.dragging) return
+  const decay = Math.exp(-FLING_LAMBDA * dt)
+  const k = (1 - decay) / FLING_LAMBDA
+  input.look.yaw += fling.yaw * k
+  input.look.pitch = clamp(input.look.pitch + fling.pitch * k, -MAX_PITCH, MAX_PITCH)
+  input.orbit.yaw += fling.oyaw * k
+  input.orbit.pitch = clamp(input.orbit.pitch + fling.opitch * k, -1, 1)
+  fling.yaw *= decay
+  fling.pitch *= decay
+  fling.oyaw *= decay
+  fling.opitch *= decay
+  if (Math.max(Math.hypot(fling.yaw, fling.pitch), Math.hypot(fling.oyaw, fling.opitch)) < FLING_REST) haltFling()
+}
 
 const TWO_PI = Math.PI * 2
 
