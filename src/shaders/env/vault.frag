@@ -28,6 +28,9 @@ uniform vec2  uResolution;
 varying vec3 vDir;
 varying vec3 vRo;
 
+const float COAST_NEAR = 120.0;
+const float COAST_FAR = 1500.0;
+
 void main() {
   vec3 ro = vRo;
   vec3 rd = normalize(vDir);
@@ -48,57 +51,87 @@ void main() {
 
   emis += uApertureL * vaultAperture(n) * uOracleCol;
 
-  vec3 shellRgb = emis * aerialGain(t);
-  float shellA = 0.0;
+  vec3 col = emis * aerialGain(t);
+  float a = 0.0;
 
-  float denom = min(rd.y, -0.02);
-  float tf = (FLOOR_Y - ro.y) / denom;
+  if (rd.y < -max((ro.y - FLOOR_TOP) / COAST_FAR, 0.02)) {
+    float tf = (FLOOR_Y - ro.y) / rd.y;
+    float ta = (ro.y - FLOOR_TOP) / -rd.y;
+    float tb = (ro.y - FLOOR_BASE) / -rd.y;
 #if FLOOR_STEPS > 0
-  for (int i = 0; i < FLOOR_STEPS; i++) {
-    tf = (vaultFloorH((ro + rd * tf).xz) - ro.y) / denom;
-  }
+    float fa = 0.0;
+    float fb = 0.0;
+    float tq = tf;
+    float fq = 0.0;
+    for (int i = 0; i < FLOOR_STEPS; i++) {
+      float fv = ro.y + rd.y * tf - vaultFloorH((ro + rd * tf).xz);
+      float dt = tf - tq;
+      float sl = abs(dt) > 1e-3 ? min((fv - fq) / dt, rd.y * 0.35) : rd.y;
+      float tn = tf - fv / sl;
+      if (fv > 0.0) {
+        ta = tf;
+        fa = fv;
+      } else {
+        tb = tf;
+        fb = fv;
+      }
+      if (fa > 0.0 && fb < 0.0) tn = ta + (tb - ta) * fa / (fa - fb);
+      tq = tf;
+      fq = fv;
+      tf = clamp(tn, ta, tb);
+    }
 #endif
-  vec3 pf = ro + rd * tf;
 
-  float h0 = vaultFloorH(pf.xz);
-  float hx = vaultFloorH(pf.xz + vec2(4.0, 0.0));
-  float hz = vaultFloorH(pf.xz + vec2(0.0, 4.0));
-  vec3 nf = normalize(vec3(h0 - hx, 4.0, h0 - hz));
+    if (tf < t && tf > 0.0) {
+      col = vec3(0.0);
+      if (tf > COAST_NEAR && tf < COAST_FAR) {
+        vec3 pf = ro + rd * tf;
 
-  float lit = max(dot(nf, ORACLE_DIR), 0.0);
-  float steep = 1.0 - nf.y;
-  float ao = 1.0 - 0.55 * smoothstep(0.10, 0.55, steep);
-  vec3 floorCol = uStoneCol * (mix(0.0009, uCrestL, smoothstep(0.30, 0.75, lit)) * ao);
+        float h0 = vaultFloorH(pf.xz);
+        float hx = vaultFloorH(pf.xz + vec2(4.0, 0.0));
+        float hz = vaultFloorH(pf.xz + vec2(0.0, 4.0));
+        vec3 nf = normalize(vec3(h0 - hx, 4.0, h0 - hz));
+        float hs = dot(vec2(hx - h0, hz - h0), rd.xz) * 0.25;
+        float tn = clamp(tf - (pf.y - h0) / min(rd.y - hs, rd.y * 0.35), ta, tb);
+        h0 += hs * (tn - tf);
+        tf = tn;
+        pf = ro + rd * tf;
 
-  float graze = pow(1.0 - max(dot(nf, -rd), 0.0), 3.0);
-  floorCol += uRimCol * (uCrestL * 1.5 * graze * smoothstep(0.12, 0.5, steep) * (0.3 + 0.7 * lit));
+        float lit = max(dot(nf, ORACLE_DIR), 0.0);
+        float steep = 1.0 - nf.y;
+        float ao = 1.0 - 0.55 * smoothstep(0.10, 0.55, steep);
+        vec3 floorCol = uStoneCol * (mix(0.0009, uCrestL, smoothstep(0.30, 0.75, lit)) * ao);
 
-  float rel = h0 - FLOOR_Y;
-  float depthW = max(smoothstep(-40.0, -200.0, rel), 0.30 * smoothstep(4.0, -14.0, rel));
-  float mistN = 0.7 + 0.3 * snoise(vec3(pf.xz * 0.012, uTime * 0.05));
-  float pulse = 0.75 + 0.25 * sin(pf.x * 0.010 - uTime * 0.16);
-  floorCol += uAbyssCol * (uAbyssL * depthW * pulse * mistN * (0.8 + 0.2 * uBreath));
+        float graze = pow(1.0 - max(dot(nf, -rd), 0.0), 3.0);
+        floorCol += uRimCol * (uCrestL * 1.5 * graze * smoothstep(0.12, 0.5, steep) * (0.3 + 0.7 * lit));
 
-  float rr = length(pf.xz - ro.xz);
-  float azf = atan(pf.z - ro.z, pf.x - ro.x);
-  vec2 azv = vec2(cos(azf), sin(azf)) * 2.1;
-  float rn = snoise(vec3(azv, 4.2));
-  float rim = exp(-abs(rr - HORIZON_R * (1.0 + 0.09 * rn)) / (26.0 + 18.0 * rn * rn)) * uHorizonL;
-  rim *= 0.72 + 0.48 * smoothstep(-0.6, 0.8, snoise(vec3(azv * 1.7, 8.8)));
-  rim *= mix(1.0, 0.35, smoothstep(600.0, 1400.0, tf));
-  floorCol = aerialCol(floorCol + uRimCol * rim, tf);
+        float rel = h0 - FLOOR_Y;
+        float depthW = max(smoothstep(-40.0, -200.0, rel), 0.30 * smoothstep(4.0, -14.0, rel));
+        float mistN = 0.7 + 0.3 * snoise(vec3(pf.xz * 0.012, uTime * 0.05));
+        float pulse = 0.75 + 0.25 * sin(pf.x * 0.010 - uTime * 0.16);
+        floorCol += uAbyssCol * (uAbyssL * depthW * pulse * mistN * (0.8 + 0.2 * uBreath));
 
-  float coast = snoise(vec3(pf.xz * 0.0016, 3.3));
-  float coast2 = snoise(vec3(pf.xz * 0.0007, 9.1));
-  float inE = 260.0 + 130.0 * coast2;
-  float outE = 750.0 + 260.0 * coast;
-  float wisp = 0.5 + 0.5 * snoise(vec3(pf.xz * 0.0045 + vec2(uTime * 0.012, 0.0), 6.6));
-  float floorA = smoothstep(inE, inE + 320.0, tf) * (1.0 - smoothstep(outE, outE + 480.0, tf))
-               * (0.24 + 0.30 * mistN + 0.16 * wisp);
-  float onFloor = step(rd.y, -0.02) * step(tf, t) * step(0.0, tf);
+        float rr = length(pf.xz - ro.xz);
+        float azf = atan(pf.z - ro.z, pf.x - ro.x);
+        vec2 azv = vec2(cos(azf), sin(azf)) * 2.1;
+        float rn = snoise(vec3(azv, 4.2));
+        float rim = exp(-abs(rr - HORIZON_R * (1.0 + 0.09 * rn)) / (26.0 + 18.0 * rn * rn)) * uHorizonL;
+        rim *= 0.72 + 0.48 * smoothstep(-0.6, 0.8, snoise(vec3(azv * 1.7, 8.8)));
+        rim *= mix(1.0, 0.35, smoothstep(600.0, 1400.0, tf));
+        floorCol = aerialCol(floorCol + uRimCol * rim, tf);
 
-  vec3 col = mix(shellRgb, floorCol * floorA, onFloor);
-  float a = mix(shellA, floorA, onFloor);
+        float coast = snoise(vec3(pf.xz * 0.0016, 3.3));
+        float coast2 = snoise(vec3(pf.xz * 0.0007, 9.1));
+        float inE = 260.0 + 130.0 * coast2;
+        float outE = 750.0 + 260.0 * coast;
+        float wisp = 0.5 + 0.5 * snoise(vec3(pf.xz * 0.0045 + vec2(uTime * 0.012, 0.0), 6.6));
+        a = smoothstep(inE, inE + 320.0, tf) * (1.0 - smoothstep(outE, outE + 480.0, tf))
+          * (1.0 - smoothstep(t - 50.0, t, tf))
+          * (0.24 + 0.30 * mistN + 0.16 * wisp);
+        col = floorCol * a;
+      }
+    }
+  }
 
   col *= uVaultGain;
 

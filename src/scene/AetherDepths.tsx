@@ -47,7 +47,8 @@ const LIGHTS: Aureole[] = [...useStore.getState().graph.nodes.values()].map((n) 
 export default function AetherDepths() {
   const mesh = useRef<THREE.Mesh>(null!)
   const quality = useStore((s) => s.quality)
-  const tier = TIER[quality]
+  const compact = useStore((s) => s.compact)
+  const tier = useMemo(() => (compact ? { ...TIER[quality], bend: 0 } : TIER[quality]), [quality, compact])
 
   const geometry = useMemo(() => {
     const g = new THREE.BufferGeometry()

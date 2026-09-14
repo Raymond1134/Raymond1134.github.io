@@ -2,6 +2,8 @@ const vec3  VAULT_C = vec3(0.0, 150.0, -170.0);
 const float R_VAULT = 820.0;
 const vec3  ORACLE_DIR = normalize(vec3(0.22, 0.94, -0.26));
 const float FLOOR_Y = -380.0;
+const float FLOOR_TOP = -350.0;
+const float FLOOR_BASE = -580.0;
 
 const float HORIZON_R = 625.7;
 

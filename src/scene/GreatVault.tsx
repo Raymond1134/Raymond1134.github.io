@@ -13,6 +13,7 @@ import { NO_COMPOSER } from './composerPolicy'
 import { ORACLE_U, ORACLE_V } from './vaultGeom'
 
 const FLOOR_STEPS: Record<Quality, number> = { low: 0, medium: 2, high: 3, ultra: 3 }
+const COMPACT_STEPS = 2
 
 const STONE = toLum('#4a5a86', 1)
 const GLASS = toLum('#a8d8ff', 1)
@@ -20,10 +21,11 @@ const ORACLE = toLum('#ffd9a8', 1)
 const RIM = toLum('#ffc98a', 1)
 const ABYSS = toLum('#49e0cf', 1)
 
-
 export default function GreatVault() {
   const mesh = useRef<THREE.Mesh>(null!)
   const quality = useStore((s) => s.quality)
+  const compact = useStore((s) => s.compact)
+  const steps = compact ? Math.min(FLOOR_STEPS[quality], COMPACT_STEPS) : FLOOR_STEPS[quality]
 
   const geometry = useMemo(() => {
     const g = new THREE.BufferGeometry()
@@ -42,7 +44,7 @@ export default function GreatVault() {
         vertexShader: vaultVert,
         fragmentShader: vaultFrag,
         defines: {
-          FLOOR_STEPS: FLOOR_STEPS[quality],
+          FLOOR_STEPS: steps,
           PHONE_GRADE: NO_COMPOSER ? 1 : 0,
           DITHER_K: 1.1,
         },
@@ -77,7 +79,7 @@ export default function GreatVault() {
         blendDstAlpha: THREE.OneFactor,
         toneMapped: false,
       }),
-    [quality],
+    [steps],
   )
   useEffect(() => () => material.dispose(), [material])
 
