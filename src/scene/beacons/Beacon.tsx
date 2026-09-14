@@ -20,7 +20,7 @@ import { worldEvents } from '@/scene/worldEvents'
 import { LUM, AERIAL_K, DOME_STOPS } from '@/scene/lightPyramid'
 import { NO_COMPOSER } from '@/scene/composerPolicy'
 import { panelSizeFor, PANEL_Z, PANEL_LIFT } from '@/scene/ui3d/panelLayout'
-import { LAMBDA } from '@/motion/tokens'
+import { LAMBDA, EASE } from '@/motion/tokens'
 import { BEACON_DEFAULT_COLOR, CLICK_BLUE as CLICK_BLUE_HEX, CLICK_BLUE_DEEP as CLICK_BLUE_DEEP_HEX } from './palette'
 import type { Quality } from '@/state/store'
 
@@ -52,6 +52,45 @@ const LABEL_HOVER_LIFT = CALM ? 0 : 0.2
 const LABEL_HOVER_SCALE = CALM ? 0 : 0.08
 const LABEL_STAGGER = 0.35
 const LABEL_LEAD = 0.06
+
+const SPIN_REST = CALM ? 0.03 : 0.11
+const SPIN_HOVER = CALM ? 0 : 1.5
+const SPIN_BOOST = CALM ? 0 : 0.8
+const TUMBLE = CALM ? 0 : 1
+
+const RING_LIFE = CALM ? 1.4 : 1.05
+const RING_ATTACK = 0.22
+const RING_MERGE = 0.3
+const RING_SPAN = CALM ? 1 : 2.1
+const RING_FROM = 0.3
+const RING_TO = CALM ? 0.55 : 1.85
+const RING_GAIN = CALM ? 0.35 : 0.85
+const RING_K = { hover: 0.7, press: 0.9, goal: 1.0, land: 1.0 } as const
+
+interface Ring {
+  age: number
+  k: number
+}
+
+const ringEnvelope = (r: Ring) => {
+  if (r.age >= RING_LIFE) return 0
+  const fall = 1 - r.age / RING_LIFE
+  return r.k * THREE.MathUtils.smoothstep(r.age, 0, RING_ATTACK) * fall * fall
+}
+
+const ringRadius = (r: Ring) =>
+  RING_FROM + (RING_TO - RING_FROM) * EASE.hearth(Math.min(1, r.age / RING_LIFE))
+
+function fireRing(rings: Ring[], k: number) {
+  const young = rings[0].age < rings[1].age ? rings[0] : rings[1]
+  if (young.age < RING_MERGE) {
+    young.k = Math.max(young.k, k)
+    return
+  }
+  const old = young === rings[0] ? rings[1] : rings[0]
+  old.age = 0
+  old.k = k
+}
 
 const DEEP_TINT = new THREE.Color('#233252')
 const WHITE = new THREE.Color('#ffffff')
@@ -153,6 +192,9 @@ function glowMat(coreW: number, skirt: number): THREE.ShaderMaterial {
       uCoreW: { value: coreW },
       uSkirt: { value: skirt },
       uExposure: { value: 1 },
+      uSpan: { value: 1 },
+      uRing: { value: new THREE.Vector2() },
+      uRingGain: { value: new THREE.Vector2() },
     },
     transparent: true,
     depthWrite: false,
@@ -255,6 +297,7 @@ function buildAssets(
         uIntensity: { value: 1 },
         uTime: { value: 0 },
         uExposure: { value: 1 },
+        uHover: { value: 0 },
       },
       transparent: false,
       depthWrite: true,
@@ -280,6 +323,12 @@ export default function Beacon({ node, role }: Props) {
   const idleAt = useRef(0)
   const wasIdle = useRef(false)
   const hoverT = useRef(0)
+  const pressed = useRef(false)
+  const spin = useRef(0)
+  const rings = useRef<Ring[]>([{ age: 9, k: 0 }, { age: 9, k: 0 }])
+  const wasHovered = useRef(false)
+  const wasGoal = useRef(false)
+  const wasLanded = useRef(false)
   const hovered = useStore((s) => s.hoveredId === node.id)
   const setHovered = useStore((s) => s.setHovered)
   const travelTo = useStore((s) => s.travelTo)
@@ -348,8 +397,13 @@ export default function Beacon({ node, role }: Props) {
     const t = state.clock.elapsedTime
     const st = useStore.getState()
     const now = performance.now()
-    hoverT.current += ((hovered ? 1 : 0) - hoverT.current) * (1 - Math.pow(0.01, dt))
+    if (pressed.current && (!input.dragging || input.dragDistance > TAP_SLOP)) pressed.current = false
+    const lit = hovered || pressed.current
+    hoverT.current +=
+      ((lit ? 1 : 0) - hoverT.current) * (1 - Math.pow(pressed.current ? 1e-4 : 0.01, dt))
     const h = hoverT.current
+    if (hovered && !wasHovered.current) fireRing(rings.current, RING_K.hover)
+    wasHovered.current = hovered
 
     const flicker =
       0.84 +
@@ -390,6 +444,11 @@ export default function Beacon({ node, role }: Props) {
       st.phase === 'settle' && role === 'current' && st.travelClock - TRAVEL_LANDING < 0.15
     const boost = (boostT.current +=
       ((landed ? 2.3 : isGoal ? 1.8 : 1) - boostT.current) * (1 - Math.pow(0.02, dt)))
+
+    if (isGoal && !wasGoal.current) fireRing(rings.current, RING_K.goal)
+    wasGoal.current = isGoal
+    if (landed && !wasLanded.current) fireRing(rings.current, RING_K.land)
+    wasLanded.current = landed
 
     queueT.current += ((st.queuedId === node.id ? 1 : 0) - queueT.current) * (1 - Math.pow(0.001, dt))
 
@@ -438,6 +497,19 @@ export default function Beacon({ node, role }: Props) {
     ;(hm.uCore.value as THREE.Color).copy(haloCore).lerp(coolTo, 1 - distAtt)
     ;(hm.uEdge.value as THREE.Color).copy(outerColor).lerp(coolTo, 1 - distAtt)
 
+    const ra = rings.current[0]
+    const rb = rings.current[1]
+    ra.age += dt
+    rb.age += dt
+    const ga = ringEnvelope(ra)
+    const gb = ringEnvelope(rb)
+    const ringBase =
+      LUM.halo * HALO_GAIN[role] * RING_GAIN * nearAtt * distAtt * adm *
+      worldEvents.grade.ignite * pd
+    hm.uSpan.value = ga + gb > 0 ? RING_SPAN : 1
+    ;(hm.uRing.value as THREE.Vector2).set(ringRadius(ra), ringRadius(rb))
+    ;(hm.uRingGain.value as THREE.Vector2).set(ga * ringBase, gb * ringBase)
+
     if (atmo.current) {
       const am = (atmo.current.material as THREE.ShaderMaterial).uniforms
       am.uWorld.value = ATMO_WORLD / 2
@@ -451,6 +523,15 @@ export default function Beacon({ node, role }: Props) {
     xm.uIntensity.value = adm
     xm.uTime.value = t
     xm.uExposure.value = worldEvents.grade.exposure
+    xm.uHover.value = h
+
+    spin.current += dt * (SPIN_REST + SPIN_HOVER * h + SPIN_BOOST * Math.max(0, boost - 1))
+    const tw = t * TUMBLE
+    crystal.current.rotation.set(
+      0.3 * Math.sin(tw * 0.047 + seed),
+      seed + spin.current,
+      0.16 * Math.sin(tw * 0.063 + seed * 1.9),
+    )
 
     hit.current.scale.setScalar(THREE.MathUtils.clamp(d * TAP_TARGET_FACTOR, 6, 46))
 
@@ -510,6 +591,12 @@ export default function Beacon({ node, role }: Props) {
           e.stopPropagation()
           setHovered(node.id)
         }}
+        onPointerDown={(e) => {
+          if (e.pointerType === 'mouse' || e.button !== 0 || !interactive) return
+          e.stopPropagation()
+          pressed.current = true
+          fireRing(rings.current, RING_K.press)
+        }}
         onPointerMove={(e) => {
           if (!canHoverPointer || !interactive) return
           e.stopPropagation()
@@ -526,6 +613,7 @@ export default function Beacon({ node, role }: Props) {
           if (role !== 'reachable') return
           e.stopPropagation()
           if (useStore.getState().hoveredId === node.id) setHovered(null)
+          if (e.pointerType === 'touch') navigator.vibrate?.(8)
           travelTo(node.id)
         }}
       >

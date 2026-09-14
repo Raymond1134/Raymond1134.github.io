@@ -11,6 +11,7 @@ uniform float uNucleusGain;
 uniform float uIntensity;
 uniform float uTime;
 uniform float uExposure;
+uniform float uHover;
 
 varying vec3 vWN;
 varying vec3 vWP;
@@ -40,7 +41,7 @@ void main() {
   float dB = p2 - dot(vOP, rB) * dot(vOP, rB);
   vec3 nuc = vec3(exp(-dR * 9.0), exp(-dG * 9.0), exp(-dB * 9.0)) * (uNucleusGain * 0.30);
 
-  float fr = pow(1.0 - max(dot(N, V), 0.0), 3.4) * 0.90;
+  float fr = pow(1.0 - max(dot(N, V), 0.0), 3.4) * (0.90 + 0.9 * uHover);
   vec3 sheen = gelSheen(vFacet * 1.7 + uTime * 0.09) * fr;
 
   vec3 col = AERIAL_DEEP * 0.6 + (sky + nuc + sheen) * uIntensity;
