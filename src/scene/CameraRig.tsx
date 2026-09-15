@@ -147,7 +147,8 @@ export default function CameraRig() {
     s.tickTravel(Math.min(dt, 1 / 20))
     const t = state.clock.elapsedTime
 
-    coastInput(dt)
+    if (s.phase === 'idle' || s.phase === 'settle') coastInput(dt)
+    else haltFling()
     if (s.phase === 'idle' || s.phase === 'fade') settleInput(dt)
     else input.dolly -= input.dolly * (1 - Math.pow(0.02, dt))
 
@@ -209,9 +210,10 @@ export default function CameraRig() {
 
       const e = EASE.glide(tt)
       baseTowards(camera.position, dest, toQuat)
+      const gy = input.gyro
+      if (gy) toQuat.multiply(offsetQuat.setFromEuler(lookEuler.set(gy.y, gy.x, 0, 'YXZ')))
       camera.quaternion.copy(frozenQuat.current).slerp(toQuat, e)
 
-      haltFling()
       input.look.yaw = 0
       input.look.pitch = 0
       input.orbit.yaw = 0

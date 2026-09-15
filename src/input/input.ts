@@ -279,18 +279,24 @@ export function attachInput(el: HTMLElement): () => void {
   }
 }
 
-export function recentre() {
-  recentring.on = true
-  haltFling()
-}
-
 const DEG = Math.PI / 180
 const GYRO_GAIN = 1
 const GYRO_MAX = 0.55
+const GYRO_SMOOTH = 11
+const GYRO_DRIFT = 1 / 8
+const GYRO_REBASE = 5
+const GYRO_REBASE_FOR = 1600
 const GYRO_TILT = new THREE.Quaternion(-Math.SQRT1_2, 0, 0, Math.SQRT1_2)
 const ZEE = new THREE.Vector3(0, 0, 1)
 
 let detachGyro: (() => void) | null = null
+let gyroRebaseUntil = 0
+
+export function recentre() {
+  recentring.on = true
+  haltFling()
+  gyroRebaseUntil = performance.now() + GYRO_REBASE_FOR
+}
 
 export const gyroAvailable = () => typeof DeviceOrientationEvent !== 'undefined'
 
@@ -309,6 +315,11 @@ export function enableGyro(): Promise<boolean> {
 export function disableGyro() {
   detachGyro?.()
   detachGyro = null
+  const g = input.gyro
+  if (g) {
+    input.look.yaw += g.x
+    input.look.pitch = clamp(input.look.pitch + g.y, -MAX_PITCH, MAX_PITCH)
+  }
   input.gyro = null
 }
 
@@ -321,7 +332,13 @@ function attachGyro() {
   const qRel = new THREE.Quaternion()
   const rel = new THREE.Euler(0, 0, 0, 'YXZ')
   let base: THREE.Quaternion | null = null
+  let lastAt = 0
   const smoothed = { x: 0, y: 0 }
+
+  const relate = (from: THREE.Quaternion) => {
+    qRel.copy(from).invert().multiply(qNow)
+    rel.setFromQuaternion(qRel)
+  }
 
   const onOrient = (e: DeviceOrientationEvent) => {
     if (e.beta === null || e.gamma === null) return
@@ -329,12 +346,22 @@ function attachGyro() {
     qNow.setFromEuler(euler)
     qNow.multiply(GYRO_TILT)
     qNow.multiply(qScreen.setFromAxisAngle(ZEE, -(screen.orientation?.angle ?? 0) * DEG))
-    if (!base) base = qNow.clone()
-    qRel.copy(base).invert().multiply(qNow)
-    rel.setFromQuaternion(qRel)
 
-    smoothed.x += (clamp(rel.y * GYRO_GAIN, -GYRO_MAX, GYRO_MAX) - smoothed.x) * 0.18
-    smoothed.y += (clamp(rel.x * GYRO_GAIN, -GYRO_MAX, GYRO_MAX) - smoothed.y) * 0.18
+    const now = performance.now()
+    const dts = base ? clamp((now - lastAt) / 1000, 0, 0.1) : 0
+    lastAt = now
+    if (!base) base = qNow.clone()
+    else base.slerp(qNow, 1 - Math.exp(-(now < gyroRebaseUntil ? GYRO_REBASE : GYRO_DRIFT) * dts))
+    relate(base)
+    const reach = Math.max(Math.abs(rel.x), Math.abs(rel.y)) * GYRO_GAIN / GYRO_MAX
+    if (reach > 1) {
+      base.slerp(qNow, 1 - 1 / reach)
+      relate(base)
+    }
+
+    const a = 1 - Math.exp(-GYRO_SMOOTH * dts)
+    smoothed.x += (clamp(rel.y * GYRO_GAIN, -GYRO_MAX, GYRO_MAX) - smoothed.x) * a
+    smoothed.y += (clamp(rel.x * GYRO_GAIN, -GYRO_MAX, GYRO_MAX) - smoothed.y) * a
     input.gyro = smoothed
   }
 
