@@ -1,7 +1,7 @@
 import { Canvas } from '@react-three/fiber'
-import { PerformanceMonitor, Preload } from '@react-three/drei'
+import { Preload } from '@react-three/drei'
 import * as THREE from 'three'
-import { Suspense, useEffect, useRef, useState } from 'react'
+import { Suspense, useEffect, useState } from 'react'
 import Scene from '@/scene/Scene'
 import Hud from '@/ui/Hud'
 import TextMode from '@/ui/TextMode'
@@ -17,29 +17,15 @@ import AudioBridge from '@/audio/AudioBridge'
 import VisibilityPause from '@/perf/VisibilityPause'
 import TextModePark from '@/perf/TextModePark'
 import BatterySaver from '@/perf/BatterySaver'
+import AdaptiveQuality from '@/perf/AdaptiveQuality'
+import { bootDpr } from '@/perf/dpr'
 import { NO_COMPOSER } from '@/scene/composerPolicy'
 import { useStore } from '@/state/store'
-import type { Quality } from '@/state/store'
 import { useHashRouting } from '@/state/routing'
 import { useViewport } from '@/ui/useViewport'
 import { isCoarsePointer } from '@/device'
 
 const coarse = isCoarsePointer()
-
-const TARGET_PX = coarse ? 1.2e6 : 5.0e6
-const DPR_FLOOR = 0.7
-
-const dprCap = () => {
-  const w = typeof innerWidth !== 'undefined' ? innerWidth : 1
-  const h = typeof innerHeight !== 'undefined' ? innerHeight : 1
-  const ratio = Math.min(
-    typeof devicePixelRatio !== 'undefined' ? devicePixelRatio : 1,
-    coarse ? 1.25 : 1.5,
-  )
-  return Math.max(DPR_FLOOR, Math.min(ratio, Math.sqrt(TARGET_PX / (w * h))))
-}
-
-const TIERS: Quality[] = ['low', 'medium', 'high', 'ultra']
 
 export default function App() {
   useViewport()
@@ -47,13 +33,7 @@ export default function App() {
   const textMode = useStore((s) => s.textMode)
   const overture = useStore((s) => s.overtureActive)
   const calm = useStore((s) => s.reducedMotion)
-  const [dpr, setDpr] = useState(dprCap)
-  const dprRef = useRef(dpr)
-  const declinedAt = useRef(0)
-  const bootTier = useRef<Quality>('high')
-  useEffect(() => {
-    dprRef.current = dpr
-  }, [dpr])
+  const [dpr, setDpr] = useState(bootDpr)
 
   const [textShown, setTextShown] = useState(textMode)
   if (textMode && !textShown) setTextShown(true)
@@ -79,55 +59,13 @@ export default function App() {
         onCreated={({ gl }) => {
           gl.setClearColor(new THREE.Color('#03040a'), 1)
           gl.toneMapping = THREE.NoToneMapping
-
-          const ctx = gl.getContext()
-          const dbg = ctx.getExtension('WEBGL_debug_renderer_info')
-          const name = dbg ? String(ctx.getParameter(dbg.UNMASKED_RENDERER_WEBGL)) : ''
-          const cores = navigator.hardwareConcurrency ?? 0
-          const discrete = /nvidia|geforce|rtx |gtx |radeon (rx|pro)|apple m\d/i.test(name)
-          const software = /swiftshader|llvmpipe|software|basic render/i.test(name)
-          const s = useStore.getState()
-          if (!coarse && s.quality === 'high') {
-            if (discrete && cores >= 8) s.setQuality('ultra')
-            else if (software || cores <= 4) s.setQuality('medium')
-          }
-          bootTier.current = useStore.getState().quality
         }}
       >
         <Suspense fallback={null}>
           <Scene />
           <Preload all />
         </Suspense>
-        <PerformanceMonitor
-          onDecline={() => {
-            declinedAt.current = performance.now()
-            const s = useStore.getState()
-            if (dprRef.current > DPR_FLOOR + 0.05) {
-              setDpr((d) => Math.max(DPR_FLOOR, d - 0.25))
-              return
-            }
-            if (s.fx !== 'off') {
-              s.setFx(s.fx === 'full' ? 'reduced' : 'off')
-              return
-            }
-            const i = TIERS.indexOf(s.quality)
-            if (i > 0) s.setQuality(TIERS[i - 1])
-          }}
-          onIncline={() => {
-            if (performance.now() - declinedAt.current < 30_000) return
-            const s = useStore.getState()
-            const i = TIERS.indexOf(s.quality)
-            if (i < TIERS.indexOf(bootTier.current)) {
-              s.setQuality(TIERS[i + 1])
-              return
-            }
-            if (s.fx !== 'full') {
-              s.setFx(s.fx === 'off' ? 'reduced' : 'full')
-              return
-            }
-            setDpr((d) => Math.min(dprCap(), d + 0.25))
-          }}
-        />
+        <AdaptiveQuality dpr={dpr} setDpr={setDpr} />
         <VisibilityPause />
         <TextModePark />
       </Canvas>

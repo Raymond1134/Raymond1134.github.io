@@ -2,15 +2,22 @@ import { useEffect, useState } from 'react'
 import { useStore } from '@/state/store'
 import '@/styles/hint.css'
 
-interface BatteryLike {
+interface BatteryLike extends EventTarget {
   level: number
   charging: boolean
 }
 
 type NavigatorWithBattery = Navigator & { getBattery?: () => Promise<BatteryLike> }
 
+const TOAST_MS = 2500
+const HINTS_CLEAR_MS = 10_000
+
 export default function BatterySaver() {
-  const [toast, setToast] = useState(false)
+  const saver = useStore((s) => s.saver)
+  const overture = useStore((s) => s.overtureActive)
+  const [settled, setSettled] = useState(false)
+  const [told, setTold] = useState(false)
+  const toast = saver && settled && !told
 
   useEffect(() => {
     const nav = navigator as NavigatorWithBattery
@@ -18,26 +25,40 @@ export default function BatterySaver() {
     if (typeof getBattery !== 'function') return
 
     let live = true
-    let toastTimer: ReturnType<typeof setTimeout> | undefined
+    let battery: BatteryLike | null = null
+    const sync = () => {
+      if (live && battery) useStore.getState().setSaver(!battery.charging && battery.level < 0.2)
+    }
 
     void (async () => {
       try {
         const b = await getBattery.call(nav)
-        if (!live || b.charging || b.level >= 0.2) return
-        const s = useStore.getState()
-        if (s.quality !== 'low') {
-          s.setQuality('low')
-          setToast(true)
-          toastTimer = setTimeout(() => setToast(false), 2500)
-        }
+        if (!live) return
+        battery = b
+        sync()
+        b.addEventListener('chargingchange', sync)
+        b.addEventListener('levelchange', sync)
       } catch {}
     })()
 
     return () => {
       live = false
-      clearTimeout(toastTimer)
+      battery?.removeEventListener('chargingchange', sync)
+      battery?.removeEventListener('levelchange', sync)
     }
   }, [])
+
+  useEffect(() => {
+    if (overture) return
+    const id = setTimeout(() => setSettled(true), HINTS_CLEAR_MS)
+    return () => clearTimeout(id)
+  }, [overture])
+
+  useEffect(() => {
+    if (!toast) return
+    const id = setTimeout(() => setTold(true), TOAST_MS)
+    return () => clearTimeout(id)
+  }, [toast])
 
   if (!toast) return null
   return (

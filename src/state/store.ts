@@ -2,6 +2,7 @@ import { create } from 'zustand'
 import { graph, site } from '@/content'
 import type { Graph } from '@/content/layout'
 import { isCoarsePointer, canHover } from '@/device'
+import { BOOT_TIER } from '@/perf/gpuTier'
 
 type Phase = 'idle' | 'turn' | 'flight' | 'settle' | 'fade'
 export type Quality = 'low' | 'medium' | 'high' | 'ultra'
@@ -33,6 +34,7 @@ interface State {
 
   quality: Quality
   fx: Fx
+  saver: boolean
   reducedMotion: boolean
   audioEnabled: boolean
   mapOpen: boolean
@@ -55,6 +57,7 @@ interface State {
   setHovered: (id: string | null) => void
   setQuality: (q: Quality) => void
   setFx: (f: Fx) => void
+  setSaver: (on: boolean) => void
   toggleMap: () => void
   toggleAudio: () => void
   toggleTextMode: () => void
@@ -74,8 +77,9 @@ export const useStore = create<State>((set, get) => ({
   phase: 'idle',
   travelClock: 0,
   travelCount: 0,
-  quality: isCoarsePointer() ? 'medium' : 'high',
+  quality: BOOT_TIER,
   fx: 'full',
+  saver: false,
   reducedMotion: typeof matchMedia !== 'undefined' && matchMedia('(prefers-reduced-motion: reduce)').matches,
   audioEnabled: false,
   mapOpen: false,
@@ -121,6 +125,10 @@ export const useStore = create<State>((set, get) => ({
         return
       }
       if (!s.pendingId && t >= FADE.total) {
+        if (s.queuedId) {
+          set({ phase: 'fade', travelClock: 0, pendingId: s.queuedId, queuedId: null, hoveredId: null })
+          return
+        }
         set({ phase: 'idle', travelClock: 0 })
         return
       }
@@ -158,6 +166,7 @@ export const useStore = create<State>((set, get) => ({
   setHovered: (id) => set({ hoveredId: id }),
   setQuality: (q) => set({ quality: q }),
   setFx: (f) => set({ fx: f }),
+  setSaver: (on) => set({ saver: on }),
   toggleMap: () => set((s) => ({ mapOpen: !s.mapOpen })),
   toggleAudio: () => set((s) => ({ audioEnabled: !s.audioEnabled })),
   toggleTextMode: () => set((s) => ({ textMode: !s.textMode, mapOpen: false, queuedId: null })),

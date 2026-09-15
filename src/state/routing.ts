@@ -2,7 +2,13 @@ import { useEffect } from 'react'
 import { useStore } from './store'
 import { site } from '@/content'
 
-const idFromHash = () => decodeURIComponent(location.hash.replace(/^#\/?/, '')).trim()
+const idFromHash = () => {
+  try {
+    return decodeURIComponent(location.hash.replace(/^#\/?/, '')).trim()
+  } catch {
+    return ''
+  }
+}
 
 const titleFor = (id: string) => {
   const node = useStore.getState().graph.nodes.get(id)
