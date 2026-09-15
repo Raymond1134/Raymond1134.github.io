@@ -37,6 +37,10 @@ const LIGHT_RADIUS = 30
 
 const WAKE_DEPTH = 28
 const WAKE_CALM = CALM ? 0.35 : 1
+const WAKE_VEL_MAX = 60
+const WAKE_JUMP = 8
+const TORCH_RADIUS = 7
+const torchCol = new THREE.Color(site.meta.themeColorAccent).lerp(new THREE.Color(site.meta.themeColorHot), 0.35)
 
 const STREAK_CAP = NO_COMPOSER ? 22 : 40
 
@@ -45,7 +49,9 @@ const damping = Math.pow(BASE.damping, 1 / TAU)
 
 const field = { center: new THREE.Vector3(), init: false }
 
-const wake = { speed: 0 }
+const wake = { speed: 0, live: false }
+const ptrPrev = new THREE.Vector3()
+const ptrVel = new THREE.Vector3()
 
 const handoff: {
   claimable: FieldAssets | null
@@ -58,7 +64,6 @@ const camVel = new THREE.Vector3()
 
 const tmpV = new THREE.Vector3()
 const rayV = new THREE.Vector3()
-const viewV = new THREE.Vector3()
 const bufV = new THREE.Vector2()
 
 type Variable = ReturnType<GPUComputationRenderer['addVariable']>
@@ -117,7 +122,8 @@ function buildAssets(gl: THREE.WebGLRenderer, size: number, opacity: number): Fi
     uTravelBoost: { value: 0 },
     uBreath: { value: 0.5 },
     uPointer: { value: new THREE.Vector4(0, 0, 0, 0) },
-    uViewDir: { value: new THREE.Vector3(0, 0, -1) },
+    uPointerVel: { value: new THREE.Vector3() },
+    uCam: { value: new THREE.Vector3() },
     uPulseOrigin: { value: new THREE.Vector3() },
     uPulseRadius: { value: -1e3 },
     uPulseBand: { value: 8 },
@@ -174,6 +180,7 @@ function buildAssets(gl: THREE.WebGLRenderer, size: number, opacity: number): Fi
       uResolution: { value: new THREE.Vector2(1, 1) },
       uLights: { value: lightPos },
       uLightCols: { value: lightCol },
+      uTorch: { value: 0 },
       uReveal: { value: 1 },
       uRevealOrigin: { value: new THREE.Vector3() },
       uPulseOrigin: { value: new THREE.Vector3() },
@@ -314,25 +321,6 @@ export default function ParticleField() {
     mu.uPulseBand.value = pl.band
     mu.uPulseGlow.value = pulseLive ? pl.glow * (1 - age / 0.8) : 0
 
-    a.hearths.sort((x, y) => x.pos.distanceToSquared(cam) - y.pos.distanceToSquared(cam))
-    for (let i = 0; i < a.lightPos.length; i++) {
-      const h = a.hearths[i]
-      if (!h) break
-      a.lightPos[i].set(h.pos.x, h.pos.y, h.pos.z, LIGHT_RADIUS)
-      a.lightCol[i].copy(h.col)
-    }
-    if (worldEvents.flare.id && worldEvents.flare.gain > 0.01) {
-      const node = s.graph.nodes.get(worldEvents.flare.id)
-      if (node) {
-        const slot = a.lightPos.length - 1
-        a.lightPos[slot].set(node.worldPosition.x, node.worldPosition.y, node.worldPosition.z, LIGHT_RADIUS * 1.5)
-        a.lightCol[slot].copy(a.hearths[0].col)
-        const hn = a.hearths.find((h) => h.pos === node.worldPosition)
-        if (hn) a.lightCol[slot].copy(hn.col)
-        a.lightCol[slot].multiplyScalar(worldEvents.flare.gain)
-      }
-    }
-
     const pe = worldEvents.pointer
     const ip = input.pointer
     const fresh = ip.active && performance.now() - ip.movedAt < 2000
@@ -346,6 +334,30 @@ export default function ParticleField() {
       rayV.set(ip.x, ip.y, 0.5).unproject(state.camera).sub(cam).normalize()
       pe.pos.copy(cam).addScaledVector(rayV, WAKE_DEPTH)
     }
+    const live = fresh && pe.w > 0.001
+    if (live && wake.live && pe.pos.distanceTo(ptrPrev) < WAKE_JUMP) {
+      tmpV.copy(pe.pos).sub(ptrPrev).divideScalar(Math.max(rawDt, 1e-3)).clampLength(0, WAKE_VEL_MAX)
+      ptrVel.lerp(tmpV, 1 - Math.exp(-dt / 0.06))
+    } else {
+      ptrVel.multiplyScalar(Math.exp(-dt / 0.25))
+    }
+    wake.live = live
+    ptrPrev.copy(pe.pos)
+
+    a.hearths.sort((x, y) => x.pos.distanceToSquared(cam) - y.pos.distanceToSquared(cam))
+    for (let i = 0; i < a.lightPos.length; i++) {
+      const h = a.hearths[i]
+      if (!h) break
+      a.lightPos[i].set(h.pos.x, h.pos.y, h.pos.z, LIGHT_RADIUS)
+      a.lightCol[i].copy(h.col)
+    }
+    const torch = pe.w > 0.02
+    if (torch) {
+      const slot = a.lightPos.length - 1
+      a.lightPos[slot].set(pe.pos.x, pe.pos.y, pe.pos.z, TORCH_RADIUS * (s.compact ? 0.8 : 1) * Math.sqrt(pe.w))
+      a.lightCol[slot].copy(torchCol)
+    }
+    mu.uTorch.value = torch ? THREE.MathUtils.smoothstep(pe.w, 0.02, 0.6) : 0
 
     velDt.current += dt
     frame.current++
@@ -356,8 +368,8 @@ export default function ParticleField() {
       vu.uBreath.value = breath(t)
       vu.uMaxSpeed.value = MAX_SPEED * (s.phase === 'flight' ? 2 : 1)
       ;(vu.uPointer.value as THREE.Vector4).set(pe.pos.x, pe.pos.y, pe.pos.z, pe.w)
-      state.camera.getWorldDirection(viewV)
-      ;(vu.uViewDir.value as THREE.Vector3).copy(viewV)
+      ;(vu.uPointerVel.value as THREE.Vector3).copy(ptrVel)
+      ;(vu.uCam.value as THREE.Vector3).copy(cam)
       ;(vu.uPulseOrigin.value as THREE.Vector3).copy(pl.origin)
       vu.uPulseRadius.value = pulseLive ? age * pl.speed : -1e3
       vu.uPulseBand.value = pl.band

@@ -8,6 +8,7 @@ uniform float uFadeStart;
 uniform float uFadeEnd;
 uniform vec4  uLights[6];
 uniform vec3  uLightCols[6];
+uniform float uTorch;
 uniform float uReveal;
 uniform vec3  uRevealOrigin;
 uniform vec3  uPulseOrigin;
@@ -31,6 +32,7 @@ varying float vClass;
 varying float vDefocus;
 varying float vLit;
 varying vec3  vLitCol;
+varying float vTorch;
 varying float vReveal;
 varying float vGlint;
 varying float vPulse;
@@ -78,7 +80,20 @@ void main() {
   float env = smoothstep(0.15, 0.75, sin(uTime * omega + seed * 40.0));
   float breathe = 1.0 + (env - 0.5) * 2.0 * (isDust * 0.12 + isFly * 0.28);
 
-  float sizePx = size1 * (1.0 + isMote * (env - 0.5) * 0.12);
+  vTorch = 0.0;
+  if (uTorch > 0.001) {
+    vec3 ax = uLights[5].xyz - cameraPosition;
+    float al = max(length(ax), 1e-3);
+    ax /= al;
+    vec3 rp = p.xyz - cameraPosition;
+    float depth = dot(rp, ax);
+    float cone = uLights[5].w * max(depth, 0.0) / al;
+    float ta = clamp(1.0 - length(rp - ax * depth) / max(cone, 1e-3), 0.0, 1.0);
+    float reach = smoothstep(3.0, 9.0, depth) * (1.0 - smoothstep(al * 1.3, al * 2.4, depth));
+    vTorch = uTorch * ta * ta * reach * (1.0 - isMote);
+  }
+
+  float sizePx = size1 * (1.0 + isMote * (env - 0.5) * 0.12) * (1.0 + 0.3 * vTorch);
 
   float px = max(sizePx, 1.5 * uPixelRatio);
   float tiny = min(1.0, (sizePx * sizePx) / (px * px));
@@ -141,7 +156,7 @@ void main() {
     vPulseS = clamp((pd - uPulseRadius) / uPulseBand, -1.0, 1.0);
   }
 
-  vGain  = dim * breathe * defDim * voidGate * tiny * streakGain;
+  vGain  = dim * breathe * defDim * voidGate * tiny * streakGain * (1.0 + 0.8 * vTorch);
   vSpeed = length(v);
   vDepth = dist;
   vSeed  = seed;

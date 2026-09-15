@@ -12,7 +12,8 @@ uniform vec3  uTravelDir;
 uniform float uTravelBoost;
 uniform float uBreath;
 uniform vec4  uPointer;
-uniform vec3  uViewDir;
+uniform vec3  uPointerVel;
+uniform vec3  uCam;
 uniform vec3  uPulseOrigin;
 uniform float uPulseRadius;
 uniform float uPulseBand;
@@ -70,15 +71,20 @@ void main() {
   vel += uTravelDir * (uTravelBoost * uDt);
 
   if (uPointer.w > 0.001) {
-    vec3 tp = uPointer.xyz - pos;
-    float pd2 = dot(tp, tp);
-    if (pd2 < 400.0) {
-      float fall = exp(-pd2 / 49.0);
-      vec3 away = -tp / max(sqrt(pd2), 1e-3);
-      vec3 tang = cross(tp, uViewDir);
-      float tl = length(tang);
-      if (tl > 1e-4) tang /= tl;
-      vel += (0.6 * away + 0.4 * tang) * (uPointer.w * 5.0 * fall * uDt);
+    vec3 ax = uPointer.xyz - uCam;
+    float al = max(length(ax), 1e-3);
+    ax /= al;
+    vec3 rp = pos - uCam;
+    float along = dot(rp, ax);
+    float sc = max(along, 1e-3) / al;
+    vec3 off = rp - ax * along;
+    float od = length(off);
+    float pd2 = od * od / (sc * sc);
+    if (along > 2.0 && pd2 < 625.0) {
+      float fall = exp(-pd2 / 64.0) * smoothstep(2.0, 7.0, along) * (1.0 - smoothstep(al * 1.3, al * 2.4, along));
+      vec3 away = off / max(od, 1e-3);
+      vec3 tang = cross(away, ax);
+      vel += ((0.6 * away + 0.4 * tang) * 9.0 + uPointerVel * (2.0 + 1.2 * seed)) * (sc * uPointer.w * fall * uDt);
     }
   }
 

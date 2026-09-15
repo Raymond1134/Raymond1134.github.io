@@ -25,6 +25,7 @@ varying float vClass;
 varying float vDefocus;
 varying float vLit;
 varying vec3  vLitCol;
+varying float vTorch;
 varying float vReveal;
 varying float vGlint;
 varying float vPulse;
@@ -68,6 +69,8 @@ void main() {
   heat = min(heat + isFly * 0.25, 1.0);
 
   heat = mix(heat * heat, heat, isFly);
+
+  heat = max(heat, vTorch * (0.62 + 0.38 * fract(vSeed * 29.3)));
 
   vec3 col = mix(
     mix(uColorCold, uColorMid, smoothstep(0.0, 0.55, heat)),
