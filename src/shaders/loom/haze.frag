@@ -16,6 +16,7 @@ varying float vAcross;
 varying float vEnd;
 varying float vAdj;
 varying float vPulse;
+varying float vPath;
 varying float vHot;
 varying float vGlow;
 varying vec3  vCol;
@@ -25,9 +26,9 @@ void main() {
   float sheath = exp(-x2 * 4.5) * 0.34 + exp(-x2 * 16.0) * 0.20;
 
   vec3 col = mix(uCold, vCol, 0.18);
-  col = mix(col, uClick, vAdj * 0.12);
+  col = mix(col, uClick, vAdj * 0.12 + vPath * 0.16);
 
-  float lum = uHazeL * (0.55 + 0.45 * vAdj) * vGlow + uPulseL * vPulse;
+  float lum = uHazeL * (0.55 + 0.45 * vAdj + 0.9 * vPath) * vGlow + uPulseL * vPulse;
   col = col * lum + mix(vCol, vec3(1.0), 0.5) * (uPulseL * vHot);
   col = aerialCol(col, vDepth) * (0.90 + 0.10 * uBreath);
 

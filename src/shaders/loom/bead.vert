@@ -1,7 +1,7 @@
 uniform float uTime;
 uniform float uPixelRatio;
 uniform float uSway;
-uniform float uCur;
+uniform vec4  uThread[THREADS];
 uniform float uPkSpeed;
 uniform float uReveal;
 uniform vec3  uRevealOrigin;
@@ -19,6 +19,7 @@ varying float vDepth;
 varying float vEnd;
 varying float vAdj;
 varying float vPulse;
+varying float vPath;
 varying float vHot;
 varying float vTw;
 varying vec3  vCol;
@@ -54,13 +55,22 @@ void main() {
   gl_PointSize = size;
   float tiny = min(1.0, (px * px) / (size * size));
 
-  vAdj = max(step(abs(aEnds.x - uCur), 0.5), step(abs(aEnds.y - uCur), 0.5));
+  vec4 th = uThread[int(aEnds.y + 0.5)];
+  vAdj = smoothstep(0.0, 1.0, th.x);
+  vPath = smoothstep(0.0, 1.0, th.y);
 
   float spd = uPkSpeed / max(aLen, 1.0);
-  float d1 = (aAlong - fract(uTime * spd + aPhase)) * aLen;
-  float d2 = (aAlong - fract(uTime * spd * 0.83 + aPhase + 0.47)) * aLen;
-  vPulse = (exp(-d1 * d1 * 0.041) + exp(-d2 * d2 * 0.041) * 0.8)
-         * mix(0.75, 1.0, vAdj);
+  float tp = uTime + th.z;
+  float ph1 = fract(tp * spd + aPhase);
+  float ph2 = fract(tp * spd * 0.83 + aPhase + 0.47);
+  float d1 = (aAlong - ph1) * aLen;
+  float d2 = (aAlong - ph2) * aLen;
+  float r1 = (1.0 - aAlong - ph1) * aLen;
+  float r2 = (1.0 - aAlong - ph2) * aLen;
+  float fwd = exp(-d1 * d1 * 0.041) + exp(-d2 * d2 * 0.041) * 0.8;
+  float rev = exp(-r1 * r1 * 0.041) + exp(-r2 * r2 * 0.041) * 0.8;
+  vPulse = mix(fwd, rev, smoothstep(0.0, 1.0, th.w))
+         * mix(0.75, 1.0, vAdj) * (1.0 + 1.2 * vPath);
   vHot = flash;
 
   vTw = 1.0 + 0.5 * uSway * sin(uTime * (1.6 + aSeed * 2.4) + aSeed * 61.8);

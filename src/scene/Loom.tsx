@@ -27,8 +27,62 @@ const CALM = useStore.getState().reducedMotion
 const REVEAL_FLASH = CALM ? 0 : 1.9
 
 const ORDER_IDX = new Map(useStore.getState().graph.order.map((id, i) => [id, i]))
+const NODES = ORDER_IDX.size
+const PARENT_IDX = Int16Array.from(useStore.getState().graph.order, (id) =>
+  ORDER_IDX.get(useStore.getState().graph.nodes.get(id)?.parentId ?? '') ?? -1,
+)
 
-const frame = { t: 0, breath: 0.5, cur: 0 }
+const HANDOFF = 0.75
+const PATH_IN = 0.28
+const PATH_OUT = 0.6
+const PATH_TURN = 0.35
+const QUICKEN = CALM ? 0.5 : 1.3
+
+const THREAD = new Float32Array(NODES * 4)
+const onPath = new Uint8Array(NODES)
+const link = { cur: -1, hov: -1 }
+
+const frame = { t: 0, breath: 0.5 }
+
+const toward = (v: number, target: number, step: number) =>
+  v < target ? Math.min(target, v + step) : Math.max(target, v - step)
+
+function markPath(a: number, b: number) {
+  onPath.fill(0)
+  if (a < 0 || b < 0 || a === b) return
+  for (let n = a; n >= 0; n = PARENT_IDX[n]) onPath[n] = 1
+  let top = b
+  while (top >= 0 && onPath[top] !== 1) {
+    onPath[top] = 2
+    top = PARENT_IDX[top]
+  }
+  if (top < 0) {
+    onPath.fill(0)
+    return
+  }
+  for (let n = PARENT_IDX[top]; n >= 0; n = PARENT_IDX[n]) onPath[n] = 0
+}
+
+function stepThreads(dt: number, cur: number, hov: number, snap: boolean) {
+  if (cur !== link.cur || hov !== link.hov) {
+    markPath(cur, hov)
+    link.cur = cur
+    link.hov = hov
+  }
+  for (let c = 0; c < NODES; c++) {
+    const p = PARENT_IDX[c]
+    if (p < 0) continue
+    const k = c * 4
+    const adj = p === cur || c === cur ? 1 : 0
+    THREAD[k] = snap ? adj : toward(THREAD[k], adj, dt / HANDOFF)
+    const on = onPath[c] > 0 && onPath[p] > 0
+    const h = THREAD[k + 1]
+    THREAD[k + 1] = toward(h, on ? 1 : 0, dt / (on ? PATH_IN : PATH_OUT))
+    const w = THREAD[k + 3]
+    THREAD[k + 3] = toward(w, on ? (onPath[c] === 1 ? 1 : 0) : h > 0.01 ? w : 0, dt / PATH_TURN)
+    THREAD[k + 2] += dt * QUICKEN * h * h * (3 - 2 * h)
+  }
+}
 
 function drive(m: THREE.Material | THREE.Material[] | undefined, gl: THREE.WebGLRenderer) {
   if (!m || Array.isArray(m)) return
@@ -36,7 +90,6 @@ function drive(m: THREE.Material | THREE.Material[] | undefined, gl: THREE.WebGL
   u.uTime.value = frame.t
   u.uBreath.value = frame.breath
   if (u.uPixelRatio) u.uPixelRatio.value = gl.getPixelRatio()
-  u.uCur.value = frame.cur
   u.uReveal.value = worldEvents.reveal
   ;(u.uRevealOrigin.value as THREE.Vector3).copy(worldEvents.revealOrigin)
   u.uExposure.value = worldEvents.grade.exposure
@@ -238,13 +291,13 @@ export default function Loom() {
       new THREE.ShaderMaterial({
         vertexShader: beadVert,
         fragmentShader: beadFrag,
-        defines: { PHONE_GRADE: NO_COMPOSER ? 1 : 0 },
+        defines: { PHONE_GRADE: NO_COMPOSER ? 1 : 0, THREADS: NODES },
         uniforms: {
           uTime: { value: 0 },
           uBreath: { value: 0.5 },
           uPixelRatio: { value: 1 },
           uSway: { value: CALM ? 0.4 : 1 },
-          uCur: { value: 0 },
+          uThread: { value: THREAD },
           uPkSpeed: { value: CALM ? 2 : 7 },
           uReveal: { value: 1 },
           uRevealOrigin: { value: new THREE.Vector3() },
@@ -269,12 +322,12 @@ export default function Loom() {
       new THREE.ShaderMaterial({
         vertexShader: hazeVert,
         fragmentShader: hazeFrag,
-        defines: { PHONE_GRADE: NO_COMPOSER ? 1 : 0 },
+        defines: { PHONE_GRADE: NO_COMPOSER ? 1 : 0, THREADS: NODES },
         uniforms: {
           uTime: { value: 0 },
           uBreath: { value: 0.5 },
           uSway: { value: CALM ? 0.4 : 1 },
-          uCur: { value: 0 },
+          uThread: { value: THREAD },
           uPkSpeed: { value: CALM ? 2 : 7 },
           uReveal: { value: 1 },
           uRevealOrigin: { value: new THREE.Vector3() },
@@ -300,11 +353,14 @@ export default function Loom() {
     hazeMaterial.dispose()
   }, [material, hazeMaterial])
 
-  useFrame((state) => {
+  useFrame((state, dt) => {
+    const s = useStore.getState()
     const t = state.clock.elapsedTime
     frame.t = t
     frame.breath = breath(t)
-    frame.cur = ORDER_IDX.get(useStore.getState().currentId) ?? 0
+    const cur = ORDER_IDX.get(s.currentId) ?? 0
+    const hov = s.hoveredId ? ORDER_IDX.get(s.hoveredId) ?? -1 : -1
+    stepThreads(Math.min(dt, 0.1), cur, hov, link.cur < 0)
     drive(points.current?.material, state.gl)
     drive(haze.current?.material, state.gl)
   })
