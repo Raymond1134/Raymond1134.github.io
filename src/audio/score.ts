@@ -6,8 +6,8 @@ import {
   engine, mix, BED, MASTER, later, clearTimer, noiseBuffer, estClock, audioEnabledNow, audioWanted,
   outputDelay,
 } from './audio'
-import { struck, sub, BELL, BELL_MAJOR, GLASS } from './timbre'
-import { noteOf, arrivalChord, tonesOf, branchOf, HEXATONIC } from './harmony'
+import { struck, sub, brownStereo, BELL, BELL_MAJOR, GLASS } from './timbre'
+import { noteOf, arrivalChord, tonesOf, branchOf, inKey, majorTierce, HEXATONIC } from './harmony'
 import { placement, locate } from './voices'
 import { graph } from '@/content'
 
@@ -23,14 +23,29 @@ const timeToExhale = (t: number) => {
   return Math.max(0, (2 * Math.PI * k + Math.PI / 2 - x) / w)
 }
 
-const chime = (when: number, hz: number, peak: number, dur: number, pan = 0) => {
+const FAR_D = 220
+
+const key = (hz: number) => inKey(hz, engine?.tide.isMajor() ?? false)
+
+const chime = (when: number, hz: number, peak: number, dur: number, pan = 0, far = 0.2) => {
   const e = engine
   if (!e) return
-  struck(e.ctx, e.chimeBus, null, when, hz, peak, dur, {
+  struck(e.ctx, e.chimeBus, e.room.send, when, key(hz), peak * (1 - 0.3 * far), dur, {
     partials: GLASS,
     strike: 0.25,
     pan,
+    send: 0.04 + 0.42 * far,
+    tilt: 1 - 0.4 * far,
   })
+}
+
+const bloomRoom = (when: number, peak: number, decay: number) => {
+  const e = engine
+  if (!e) return
+  const g = e.room.send.gain
+  g.cancelScheduledValues(when)
+  g.setTargetAtTime(peak, when, 0.09)
+  g.setTargetAtTime(1, when + 0.45, decay)
 }
 
 const bell = (
@@ -43,8 +58,9 @@ const bell = (
 ) => {
   const e = engine
   if (!e) return
-  struck(e.ctx, e.strikeBus, e.room.send, when, hz, peak, dur, {
-    partials: major ? BELL_MAJOR : BELL,
+  const f = key(hz)
+  struck(e.ctx, e.strikeBus, e.room.send, when, f, peak, dur, {
+    partials: major || (e.tide.isMajor() && majorTierce(f)) ? BELL_MAJOR : BELL,
     strike: 1,
     pan,
     send: 0.35,
@@ -54,7 +70,7 @@ const bell = (
 const thump = (when: number, hz: number, peak: number, hold: number, ring: number) => {
   const e = engine
   if (!e) return
-  const f = Math.max(30, hz)
+  const f = key(Math.max(30, hz))
   sub(e.ctx, e.subBus, when, f, peak, hold, ring)
   if (peak >= 0.05) {
     const d = e.bedDuck.gain
@@ -67,17 +83,22 @@ const thump = (when: number, hz: number, peak: number, hold: number, ring: numbe
 
 const panOf = (id: string) => placement.get(id)?.pan ?? 0
 const gainAt = (id: string) => Math.max(0.3, placement.get(id)?.g ?? 0.5)
+const farOf = (id: string) => Math.min(1, (placement.get(id)?.d ?? 60) / FAR_D)
 
-const pickSource = (currentId: string): { hz: number; pan: number } => {
+const pickSource = (currentId: string): { hz: number; pan: number; far: number } => {
   if (Math.random() < 0.65) {
     const branch = branchOf(currentId)
     const hub = graph.nodes.get(branch)
     const familyIds = [branch, ...(hub?.children ?? [])]
     const id = familyIds[(Math.random() * familyIds.length) | 0]
     const oct = [0.5, 1, 2][(Math.random() * 3) | 0]
-    return { hz: Math.min(1318.51, noteOf(id).hover * oct), pan: panOf(id) }
+    return { hz: Math.min(1318.51, noteOf(id).hover * oct), pan: panOf(id), far: farOf(id) }
   }
-  return { hz: HEXATONIC[(Math.random() * HEXATONIC.length) | 0], pan: Math.random() * 1.2 - 0.6 }
+  return {
+    hz: HEXATONIC[(Math.random() * HEXATONIC.length) | 0],
+    pan: Math.random() * 1.2 - 0.6,
+    far: 0.2 + Math.random() * 0.6,
+  }
 }
 
 const nextChime = (delayS: number) => {
@@ -97,6 +118,7 @@ const nextChime = (delayS: number) => {
         0.05 + Math.random() * 0.05,
         3.4 + Math.random() * 2.6,
         src.pan,
+        src.far,
       )
       nextChime(7 + Math.random() * 9)
     },
@@ -119,7 +141,7 @@ export const startChimes = () => {
   const e = engine
   if (e) {
     const src = pickSource(currentIdHint || graph.rootId)
-    chime(e.ctx.currentTime + 0.35, src.hz, 0.06, 4.2, src.pan)
+    chime(e.ctx.currentTime + 0.35, src.hz, 0.06, 4.2, src.pan, src.far)
   }
   nextChime(6 + Math.random() * 5)
 }
@@ -132,7 +154,7 @@ export const confirmBloom = (currentId: string) => {
   igniteOwed = false
   if (reprised) {
     const t = engine.ctx.currentTime
-    chime(t + 0.02, noteOf(currentId).hover, 0.05, 2.5, panOf(currentId))
+    chime(t + 0.02, noteOf(currentId).hover, 0.05, 2.5, panOf(currentId), farOf(currentId))
     return
   }
   if (playIgnition(currentId, 0.62)) reprised = true
@@ -158,7 +180,7 @@ export const repayIgnition = () => {
 export const farewell = () => {
   const e = engine
   if (!e) return
-  chime(e.ctx.currentTime + 0.01, 220, 0.02, 0.4, 0)
+  chime(e.ctx.currentTime + 0.01, 220, 0.02, 0.4, 0, 0.1)
 }
 
 export const playHover = (id: string) => {
@@ -170,7 +192,7 @@ export const playHover = (id: string) => {
   if (id === mix.lastPingId && t < mix.lastPing + 0.9) return
   mix.lastPing = t
   mix.lastPingId = id
-  chime(t + 0.02, noteOf(id).hover, 0.035, 0.5, panOf(id))
+  chime(t + 0.02, noteOf(id).hover, 0.035, 0.5, panOf(id), farOf(id))
 }
 
 const arrive = (destId: string, when: number, peakScale = 1) => {
@@ -181,14 +203,15 @@ const arrive = (destId: string, when: number, peakScale = 1) => {
 
   let bass = root
   while (bass > 130) bass /= 2
-  engine?.tide.slashTo(bass)
+  engine?.tide.slashTo(key(bass))
 
   const chord = arrivalChord(destId)
   bell(when, root, 0.30 * peakScale, 5.2, panOf(destId))
   const peaks = [0.055, 0.042, 0.032]
   chord.forEach((hz, i) => {
-    chime(when + 0.07 + i * 0.07, hz, (peaks[i] ?? 0.03) * peakScale, 4 + i, 0)
+    chime(when + 0.07 + i * 0.07, hz, (peaks[i] ?? 0.03) * peakScale, 4 + i, 0, 0.05)
   })
+  bloomRoom(when, 1 + 0.45 * peakScale, 1.2)
 }
 
 export const playIgnition = (id: string, scale = 1) => {
@@ -216,6 +239,7 @@ export const playIgnition = (id: string, scale = 1) => {
   const hit = t + 0.145
   bell(hit, root, 0.42 * scale, 9.0, 0, false)
   bell(hit + 0.012, root * 2, 0.28 * scale, 6.5, 0, false)
+  bloomRoom(hit, 1.5 + 0.2 * scale, 1.6)
   let f = root / 2
   while (f < 32) f *= 2
   thump(hit, f, 0.28 * scale, 0.40, 4.2)
@@ -242,7 +266,7 @@ export const playResolve = (id: string) => {
   if (!e || !audioEnabledNow() || e.ctx.state !== 'running') return
   const t = e.ctx.currentTime
   arrivalChord(id).forEach((hz, i) => {
-    chime(t + 0.03 + i * 0.09, hz, 0.028, 3.5 + i * 0.5, panOf(id) * 0.5)
+    chime(t + 0.03 + i * 0.09, hz, 0.028, 3.5 + i * 0.5, panOf(id) * 0.5, farOf(id))
   })
 }
 
@@ -258,7 +282,7 @@ export const playPassage = (destId: string | null) => {
   mix.bedBusyUntil = performance.now() + (TRAVEL_LANDING + 2.9) * 1000
 
   const src = e.ctx.createBufferSource()
-  src.buffer = noiseBuffer(e.ctx)
+  src.buffer = brownStereo(e.ctx)
   src.loop = true
   const bp = e.ctx.createBiquadFilter()
   bp.type = 'bandpass'
@@ -298,7 +322,7 @@ export const playPassage = (destId: string | null) => {
     const ladder = [...chord].sort((a, b) => a - b)
     const peaks = [0.075, 0.06, 0.05]
     ladder.slice(0, 3).forEach((hz, i) => {
-      chime(t + 0.4 + i * 0.35, hz, peaks[i] ?? 0.05, 2.8, panOf(destId))
+      chime(t + 0.4 + i * 0.35, hz, peaks[i] ?? 0.05, 2.8, panOf(destId), farOf(destId) * (1 - i * 0.3))
     })
   }
 
@@ -352,6 +376,7 @@ export const playPicardy = (id: string) => {
 
   bell(t, root, 0.34, 11.0, 0, true)
   bell(t + 0.09, root * 1.5, 0.20, 8.0, -0.2, true)
+  bloomRoom(t, 1.7, 2.2)
   let f = root / 2
   while (f < 32) f *= 2
   thump(t, f, 0.22, 0.45, 5.0)
@@ -437,7 +462,10 @@ export const playMigration = (from: Vector3, to: Vector3, dur: number) => {
     g.gain.exponentialRampToValueAtTime(0.0001, at + 0.5)
     const p = e.ctx.createStereoPanner()
     p.pan.value = here.pan
+    const send = e.ctx.createGain()
+    send.gain.value = 0.2
     src.connect(bp).connect(g).connect(p).connect(e.chimeBus)
+    p.connect(send).connect(e.room.send)
     src.start(at)
     src.stop(at + 0.6)
     src.onended = () => {
@@ -445,6 +473,7 @@ export const playMigration = (from: Vector3, to: Vector3, dur: number) => {
       bp.disconnect()
       g.disconnect()
       p.disconnect()
+      send.disconnect()
     }
   }
 }
@@ -464,12 +493,16 @@ export const playAuroraVeil = (dur: number) => {
     g.gain.setValueAtTime(0.0001, t)
     g.gain.linearRampToValueAtTime(0.03, t + dur * 0.45)
     g.gain.linearRampToValueAtTime(0.0001, t + dur)
+    const send = e.ctx.createGain()
+    send.gain.value = 0.2
     o.connect(g).connect(e.chimeBus)
+    g.connect(send).connect(e.room.send)
     o.start(t)
     o.stop(t + dur + 0.1)
     o.onended = () => {
       o.disconnect()
       g.disconnect()
+      send.disconnect()
     }
   }
 }
@@ -501,7 +534,7 @@ export const playClerestory = (dur: number) => {
   const tones = tonesOf(branchOf(currentIdHint || graph.rootId))
   for (let i = 0; i < 3; i++) {
     const tone = tones[i % tones.length]
-    chime(t + dur * 0.35 + i * 0.55, Math.min(1318.51, tone.hover * 2), 0.022, 5, (i - 1) * 0.4)
+    chime(t + dur * 0.35 + i * 0.55, Math.min(1318.51, tone.hover * 2), 0.022, 5, (i - 1) * 0.4, 0.55)
   }
 }
 

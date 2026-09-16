@@ -29,11 +29,18 @@ export const GLASS: Partial[] = [
 ]
 
 let brown: AudioBuffer | null = null
+let brownWide: AudioBuffer | null = null
 let blue: AudioBuffer | null = null
+
+const BROWN_S = 2
+const BROWN_WIDE_S = 2.6
+const BLUE_S = 2.3
+const SHARED = 0.55
+const OWN = Math.sqrt(1 - SHARED * SHARED)
 
 export const brownNoise = (c: BaseAudioContext) => {
   if (brown) return brown
-  const buf = c.createBuffer(1, Math.floor(c.sampleRate * 2), c.sampleRate)
+  const buf = c.createBuffer(1, Math.floor(c.sampleRate * BROWN_S), c.sampleRate)
   const d = buf.getChannelData(0)
   let v = 0
   for (let i = 0; i < d.length; i++) {
@@ -44,16 +51,37 @@ export const brownNoise = (c: BaseAudioContext) => {
   return buf
 }
 
+export const brownStereo = (c: BaseAudioContext) => {
+  if (brownWide) return brownWide
+  const buf = c.createBuffer(2, Math.floor(c.sampleRate * BROWN_WIDE_S), c.sampleRate)
+  const l = buf.getChannelData(0)
+  const r = buf.getChannelData(1)
+  let m = 0
+  let a = 0
+  let b = 0
+  for (let i = 0; i < l.length; i++) {
+    m = m * 0.86 + (Math.random() * 2 - 1) * 0.14
+    a = a * 0.86 + (Math.random() * 2 - 1) * 0.14
+    b = b * 0.86 + (Math.random() * 2 - 1) * 0.14
+    l[i] = (SHARED * m + OWN * a) * 2.2
+    r[i] = (SHARED * m + OWN * b) * 2.2
+  }
+  brownWide = buf
+  return buf
+}
+
 export const blueNoise = (c: BaseAudioContext) => {
   if (blue) return blue
-  const n = Math.floor(c.sampleRate * 2)
-  const buf = c.createBuffer(1, n, c.sampleRate)
-  const d = buf.getChannelData(0)
-  let prev = 0
-  for (let i = 0; i < n; i++) {
-    const w = Math.random() * 2 - 1
-    d[i] = (w - prev) * 0.5
-    prev = w
+  const n = Math.floor(c.sampleRate * BLUE_S)
+  const buf = c.createBuffer(2, n, c.sampleRate)
+  for (let ch = 0; ch < 2; ch++) {
+    const d = buf.getChannelData(ch)
+    let prev = 0
+    for (let i = 0; i < n; i++) {
+      const w = Math.random() * 2 - 1
+      d[i] = (w - prev) * 0.5
+      prev = w
+    }
   }
   blue = buf
   return buf
@@ -61,6 +89,7 @@ export const blueNoise = (c: BaseAudioContext) => {
 
 export const forgetNoise = () => {
   brown = null
+  brownWide = null
   blue = null
 }
 
@@ -78,6 +107,7 @@ interface StruckOpts {
   strike?: number
   pan?: number
   send?: number
+  tilt?: number
 }
 
 export const struck = (
@@ -92,21 +122,25 @@ export const struck = (
 ) => {
   const table = opts.partials ?? BELL
   const hammer = opts.strike ?? 1
+  const tilt = opts.tilt ?? 1
   const pan = Math.max(-0.85, Math.min(0.85, opts.pan ?? 0))
 
   const p = c.createStereoPanner()
   p.pan.value = pan
   p.connect(dest)
+  let wet: GainNode | null = null
   if (send && opts.send) {
-    const s = c.createGain()
-    s.gain.value = opts.send
-    p.connect(s).connect(send)
+    wet = c.createGain()
+    wet.gain.value = opts.send
+    p.connect(wet).connect(send)
   }
 
   let live = table.length
   const done = () => {
     live--
-    if (live <= 0) p.disconnect()
+    if (live > 0) return
+    p.disconnect()
+    wet?.disconnect()
   }
 
   for (const pt of table) {
@@ -125,7 +159,8 @@ export const struck = (
       o.detune.linearRampToValueAtTime(0, when + 0.034)
     }
 
-    ring(g.gain, when, peak * pt.g, dur * pt.d, 0.006)
+    const shade = tilt === 1 ? 1 : Math.pow(tilt, Math.max(0, Math.log2(pt.r)))
+    ring(g.gain, when, peak * pt.g * shade, dur * pt.d, 0.006)
     o.connect(g).connect(p)
     o.start(when)
     o.stop(end)

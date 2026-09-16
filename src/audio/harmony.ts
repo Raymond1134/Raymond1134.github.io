@@ -27,6 +27,23 @@ const FALLBACK = BRANCH_TONES.nexus
 
 export const HEXATONIC = [440.0, 493.88, 523.25, 587.33, 659.25, 783.99, 880.0, 1046.5, 1174.66, 1318.51]
 
+const C4 = 261.63
+const SHARP = 2 ** (1 / 12)
+
+export function inKey(hz: number, major: boolean): number {
+  if (!major) return hz
+  const oct = Math.log2(hz / C4)
+  return Math.abs(oct - Math.round(oct)) < 0.01 ? hz * SHARP : hz
+}
+
+const A_MAJOR = [0, 2, 4, 5, 7, 9, 11]
+const diatonic = (hz: number, up: number) =>
+  A_MAJOR.includes((((Math.round(12 * Math.log2(hz / 440)) + up) % 12) + 12) % 12)
+
+export function majorTierce(hz: number): boolean {
+  return diatonic(hz, 4) && !diatonic(hz, 3)
+}
+
 export function branchOf(id: string): string {
   let node = graph.nodes.get(id)
   while (node && node.depth > 1 && node.parentId) node = graph.nodes.get(node.parentId)

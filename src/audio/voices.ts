@@ -1,10 +1,14 @@
 import type * as THREE from 'three'
 import { Matrix4, Vector3 } from 'three'
 import { graph } from '@/content'
-import { noteOf } from './harmony'
+import { noteOf, inKey } from './harmony'
 
 const PEAK = 0.035
 const SMOOTH = 0.12
+const LEAN = 0.5
+const DOPPLER = 0.12
+const BEND_MAX = 28
+const TELEPORT = 900
 
 interface Voice {
   oscA: OscillatorNode
@@ -16,6 +20,10 @@ interface Voice {
   send: GainNode
   beaconId: string | null
   level: number
+  drone: number
+  hz: number
+  prevD: number
+  bend: number
 }
 
 export const placement = new Map<string, { pan: number; g: number; d: number; behind: boolean }>()
@@ -35,7 +43,14 @@ export const locate = (p: Vector3) => {
 }
 
 export interface VoicePool {
-  update: (camera: THREE.Camera, currentId: string, forceId: string | null, breathVal: number) => void
+  update: (
+    camera: THREE.Camera,
+    currentId: string,
+    forceId: string | null,
+    breathVal: number,
+    dt: number,
+    major: boolean,
+  ) => void
   setBudget: (n: number) => void
   nodes: AudioNode[]
   dispose: () => void
@@ -71,14 +86,23 @@ export function createVoices(ctx: AudioContext, out: AudioNode, roomSend: AudioN
     oscA.start()
     oscB.start()
     nodes.push(gain, lp, pan, dry, send)
-    const voice: Voice = { oscA, oscB, gain, lp, pan, dry, send, beaconId: null, level: 0 }
+    const voice: Voice = {
+      oscA, oscB, gain, lp, pan, dry, send, beaconId: null, level: 0, drone: 0, hz: 0, prevD: -1, bend: 0,
+    }
     voices.push(voice)
     return voice
   }
 
   for (let i = 0; i < budget; i++) makeVoice()
 
-  const update = (camera: THREE.Camera, currentId: string, forceId: string | null, breathVal: number) => {
+  const update = (
+    camera: THREE.Camera,
+    currentId: string,
+    forceId: string | null,
+    breathVal: number,
+    dt: number,
+    major: boolean,
+  ) => {
     const t = ctx.currentTime
     camera.updateMatrixWorld()
     inv.copy(camera.matrixWorld).invert()
@@ -120,11 +144,13 @@ export function createVoices(ctx: AudioContext, out: AudioNode, roomSend: AudioN
       if (voices.some((vc) => vc.beaconId === id)) continue
       const free = voices.slice(0, cap).find((vc) => vc.beaconId === null && (vc.gain.gain.value as number) < 0.003)
       if (!free) continue
-      const drone = noteOf(id).drone
-      free.oscA.frequency.setValueAtTime(drone, t)
-      free.oscB.frequency.setValueAtTime(drone, t)
+      free.drone = noteOf(id).drone
+      free.hz = inKey(free.drone, major)
+      free.oscA.frequency.setValueAtTime(free.hz, t)
+      free.oscB.frequency.setValueAtTime(free.hz, t)
       free.beaconId = id
       free.level = 0
+      free.prevD = -1
     }
 
     for (const vc of voices.slice(0, cap)) {
@@ -133,6 +159,24 @@ export function createVoices(ctx: AudioContext, out: AudioNode, roomSend: AudioN
       if (!p) continue
       let g = p.g
       if (vc.beaconId === currentId) g = Math.max(g, 0.55)
+      else if (vc.beaconId === forceId) g = Math.max(g, LEAN)
+      const hz = inKey(vc.drone, major)
+      if (hz !== vc.hz) {
+        vc.hz = hz
+        vc.oscA.frequency.setTargetAtTime(hz, t, 0.6)
+        vc.oscB.frequency.setTargetAtTime(hz, t, 0.6)
+      }
+      let bend = 0
+      if (dt > 0 && vc.prevD >= 0) {
+        const closing = (p.d - vc.prevD) / dt
+        if (Math.abs(closing) < TELEPORT) bend = Math.max(-BEND_MAX, Math.min(BEND_MAX, -closing * DOPPLER))
+      }
+      vc.prevD = p.d
+      if (Math.abs(bend - vc.bend) > 0.5) {
+        vc.bend = bend
+        vc.oscA.detune.setTargetAtTime(-4 + bend, t, 0.2)
+        vc.oscB.detune.setTargetAtTime(4 + bend, t, 0.2)
+      }
       const target =
         PEAK * g * (p.behind ? 0.8 : 1) * (1 + 0.12 * (breathVal * 2 - 1))
       vc.gain.gain.setTargetAtTime(target, t, vc.level === 0 ? 0.33 : SMOOTH)

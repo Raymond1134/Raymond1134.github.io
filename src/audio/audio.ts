@@ -11,7 +11,7 @@ import type { TideCtl } from './tide'
 import {
   startChimes, stopChimes, confirmBloom, repayIgnition, farewell, resetScore, picardyReady,
 } from './score'
-import { brownNoise, blueNoise, forgetNoise, forgetWaves } from './timbre'
+import { brownNoise, brownStereo, blueNoise, forgetNoise, forgetWaves } from './timbre'
 import { worldEvents } from '@/scene/worldEvents'
 
 const KEY = 'aether.audio'
@@ -200,7 +200,7 @@ const build = (): Engine => {
   const bus = c.createGain()
   bus.connect(out)
   const chimeSend = c.createGain()
-  chimeSend.gain.value = 0.45
+  chimeSend.gain.value = 0.25
   bus.connect(chimeSend).connect(room.send)
 
   const delay = c.createDelay(1)
@@ -228,7 +228,7 @@ const build = (): Engine => {
   const moveSend = c.createGain()
   moveSend.gain.value = 0.1
   moveSrc = c.createBufferSource()
-  moveSrc.buffer = noiseBuffer(c)
+  moveSrc.buffer = brownStereo(c)
   moveSrc.loop = true
   moveSrc.connect(moveBp).connect(moveGain)
   moveGain.connect(out)
@@ -430,8 +430,8 @@ export const audioFrame = (t: number, camera: THREE.Camera) => {
     e.airGain.gain.setTargetAtTime(airTarget, now, airRising ? 0.25 : 0.55)
   }
 
-  const force = s.phase !== 'idle' ? (s.pendingId ?? s.currentId) : null
-  e.voices.update(camera, s.currentId, force, b)
+  const force = s.phase !== 'idle' ? (s.pendingId ?? s.currentId) : s.hoveredId
+  e.voices.update(camera, s.currentId, force, b, teleport ? 0 : dt, e.tide.isMajor())
 
   if (s.quality !== mix.tier) {
     mix.tier = s.quality
