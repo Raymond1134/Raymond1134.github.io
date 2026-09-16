@@ -105,6 +105,7 @@ export default function DeepLayer() {
           uDrift: { value: calm ? 0 : 1 },
           uReveal: { value: 1 },
           uRevealOrigin: { value: new THREE.Vector3() },
+          uResolution: { value: new THREE.Vector2(1, 1) },
           uAlpha: { value: LUM.deepSnow },
         },
         transparent: true,
@@ -126,6 +127,7 @@ export default function DeepLayer() {
     u.uPixelRatio.value = state.gl.getPixelRatio()
     u.uReveal.value = worldEvents.reveal
     ;(u.uRevealOrigin.value as THREE.Vector3).copy(worldEvents.revealOrigin)
+    state.gl.getDrawingBufferSize(u.uResolution.value as THREE.Vector2)
   })
 
   return (

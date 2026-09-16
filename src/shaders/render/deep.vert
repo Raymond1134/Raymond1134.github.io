@@ -6,6 +6,7 @@ uniform float uPixelRatio;
 uniform float uDrift;
 uniform float uReveal;
 uniform vec3  uRevealOrigin;
+uniform vec2  uResolution;
 
 attribute float aSize;
 attribute float aSeed;
@@ -14,6 +15,8 @@ attribute vec3  aColor;
 
 varying vec3  vCol;
 varying float vA;
+
+const vec3 STAR = vec3(0.30, 0.34, 0.52);
 
 void main() {
   vec3 p = position;
@@ -35,19 +38,29 @@ void main() {
   gl_Position = projectionMatrix * mv;
   float dist = max(-mv.z, 0.001);
 
-  float px = min(aSize * uPixelRatio * (130.0 / dist), 4.0 * uPixelRatio);
+  float vk = clamp(uResolution.y / (uPixelRatio * 760.0), 0.62, 1.0);
+  float px = min(aSize * uPixelRatio * (130.0 / dist), 4.0 * uPixelRatio) * vk;
   float size = max(px, 1.5 * uPixelRatio);
-  gl_PointSize = size;
   float tiny = min(1.0, (px * px) / (size * size));
 
   float reveal = 1.0;
+  float glint = 0.0;
   if (uReveal < 1.0) {
-    float front = uReveal * 380.0;
-    reveal = smoothstep(front, front - 14.0, distance(p, uRevealOrigin)) * step(0.001, uReveal);
+    float front = uReveal * (380.0 + 520.0 * uReveal * uReveal * uReveal);
+    float d = distance(p, uRevealOrigin);
+    float on = step(0.001, uReveal);
+    reveal = smoothstep(front, front - 40.0, d) * on;
+    glint = exp(-abs(d - front + 18.0) / 20.0) * on;
   }
 
-  vA = (0.9 + 0.2 * (uBreath - 0.5)) * smoothstep(40.0, 80.0, dist) * reveal * tiny
-     * edge * (1.0 + 0.35 * aRole);
+  float tw = (1.0 - aRole) * step(0.62, fract(aSeed * 7.13))
+           * pow(max(0.5 + 0.5 * sin(uTime * (0.6 + 1.2 * fract(aSeed * 3.17)) + aSeed * 11.0), 0.0), 24.0);
+  float spark = max(tw, glint) * uDrift;
 
-  vCol = gelTint(aColor, aSeed * 60.0 + uTime * 0.08, 0.28);
+  gl_PointSize = max(size, (1.5 + 1.5 * spark) * uPixelRatio);
+
+  vA = (0.9 + 0.2 * (uBreath - 0.5)) * smoothstep(40.0, 80.0, dist) * reveal * mix(tiny, 1.0, spark)
+     * edge * (1.0 + 0.35 * aRole) * (1.0 + 7.0 * spark);
+
+  vCol = mix(gelTint(aColor, aSeed * 60.0 + uTime * 0.08, 0.28), STAR, 0.5 * spark);
 }

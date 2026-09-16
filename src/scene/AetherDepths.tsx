@@ -5,6 +5,7 @@ import depthsVert from '@/shaders/env/depths.vert'
 import depthsFrag from '@/shaders/env/depths.frag'
 import { site } from '@/content'
 import { useStore, travelProgress } from '@/state/store'
+import { swellTight } from '@/motion/tokens'
 import { breath } from './breath'
 import { worldEvents } from './worldEvents'
 import { LUM, DOME_STOPS } from './lightPyramid'
@@ -130,7 +131,7 @@ export default function AetherDepths() {
     for (const l of LIGHTS) {
       const dist = cam.position.distanceTo(l.pos)
       l.dir.copy(l.pos).sub(cam.position).normalize()
-      let target = l.id === goalId ? 1.25 + 0.75 * Math.sin(travelProgress(s) * Math.PI) : 1
+      let target = l.id === goalId ? 1.3 + 1.6 * swellTight(travelProgress(s)) : 1
       if (l.id === worldEvents.flare.id) target *= 1 + 0.5 * worldEvents.flare.gain
       l.own += (target - l.own) * k
       l.w = LUM.aureole * Math.exp(-dist * FALLOFF) * l.own
@@ -141,7 +142,7 @@ export default function AetherDepths() {
     for (let i = 0; i < L; i++) {
       ;(u.uLightDir.value as THREE.Vector3[])[i].copy(LIGHTS[i].dir)
       ;(u.uLightCol.value as THREE.Color[])[i].copy(LIGHTS[i].col)
-      ;(u.uLightW.value as number[])[i] = LIGHTS[i].w
+      ;(u.uLightW.value as number[])[i] = LIGHTS[i].w * worldEvents.domeGain
     }
   })
 

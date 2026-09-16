@@ -95,7 +95,7 @@ export default function GreatVault() {
     ;(u.uViewInv.value as THREE.Matrix4).copy(cam.matrixWorld)
     u.uTime.value = t
     u.uBreath.value = breath(t)
-    u.uVaultGain.value = worldEvents.grade.vault
+    u.uVaultGain.value = worldEvents.grade.vault * worldEvents.domeGain
     u.uExposure.value = worldEvents.grade.exposure
     state.gl.getDrawingBufferSize(u.uResolution.value as THREE.Vector2)
   })
