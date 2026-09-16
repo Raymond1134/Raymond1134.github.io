@@ -48,8 +48,11 @@
 
 @media (pointer: coarse) and (max-width: 600px), (pointer: coarse) and (max-height: 600px) {
   .hint {
-    bottom: calc(var(--sab) + 108px);
+    bottom: calc(var(--sab) + 112px);
     border-radius: 26px;
+    background: rgba(9, 14, 28, 0.74);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
   }
 }
 

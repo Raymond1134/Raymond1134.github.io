@@ -91,6 +91,19 @@
   .shortcuts-close:hover { background: rgba(207, 224, 247, 0.08); }
 }
 
+@media (pointer: coarse) and (max-width: 600px), (pointer: coarse) and (max-height: 600px) {
+  .shortcuts-veil {
+    background: rgba(3, 5, 14, 0.86);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+  .shortcuts-panel {
+    background: linear-gradient(180deg, rgba(14, 19, 38, 0.9), rgba(9, 13, 28, 0.86));
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+}
+
 @keyframes shortcuts-veil {
   from { opacity: 0; }
   to { opacity: 1; }

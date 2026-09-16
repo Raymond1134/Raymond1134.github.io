@@ -1,7 +1,7 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { CSSProperties, ReactNode } from 'react'
 import { useStore } from '@/state/store'
-import { recentre, enableGyro, disableGyro, gyroAvailable, awayOffset, stillFor } from '@/input/input'
+import { input, recentre, enableGyro, disableGyro, gyroAvailable, awayOffset, stillFor } from '@/input/input'
 import { worldEvents } from '@/scene/worldEvents'
 import { playUi } from '@/audio/score'
 import { BEACON_DEFAULT_COLOR } from '@/scene/beacons/palette'
@@ -9,6 +9,9 @@ import '@/styles/hud.css'
 
 const EDGE = 56
 const SWIPE = 70
+const SWIPE_MS = 1200
+const GYRO_RANGE = 0.55
+const LEVEL_PX = 5
 const MAP_INVITE_KEY = 'aether.map-invite'
 
 const FIELD = /^(input|textarea|select)$/i
@@ -26,6 +29,7 @@ export default function Hud() {
   const textMode = useStore((s) => s.textMode)
   const overture = useStore((s) => s.overtureActive)
   const coarse = useStore((s) => s.coarse)
+  const calm = useStore((s) => s.reducedMotion)
 
   const travelTo = useStore((s) => s.travelTo)
   const toggleMap = useStore((s) => s.toggleMap)
@@ -36,6 +40,7 @@ export default function Hud() {
   const [mapInvite, setMapInvite] = useState(false)
 
   const [ghost, setGhost] = useState(false)
+  const navRef = useRef<HTMLElement>(null)
 
   const parentId = graph.nodes.get(currentId)?.parentId ?? null
   const idle = phase === 'idle'
@@ -78,36 +83,123 @@ export default function Hud() {
   }, [])
 
   useEffect(() => {
-    if (!coarse || textMode) return
+    const root = document.documentElement
+    const sync = (q: string) => {
+      if (root.dataset.q !== q) root.dataset.q = q
+    }
+    sync(useStore.getState().quality)
+    return useStore.subscribe((s) => sync(s.quality))
+  }, [])
+
+  useEffect(() => {
+    const nav = navRef.current
+    if (!coarse || textMode || !nav) return
     let x0 = 0
     let y0 = 0
     let t0 = 0
     let armed = false
+    let pull = 0
+
+    const setPull = (v: number) => {
+      if (v === pull) return
+      if (!pull) nav.dataset.pulling = ''
+      if (!v) delete nav.dataset.pulling
+      pull = v
+      nav.style.setProperty('--pull', String(v))
+    }
+
+    const disarm = () => {
+      armed = false
+      setPull(0)
+    }
+
+    const armLine = () => {
+      const r = nav.getBoundingClientRect()
+      const sab = Math.max(0, (parseFloat(getComputedStyle(nav).paddingBottom) || 0) - 6)
+      const edge = innerHeight - EDGE - sab
+      const dock = r.bottom >= innerHeight - 1 && r.width > r.height
+      return dock ? Math.min(edge, r.top - 8) : edge
+    }
+
+    const swiped = (e: PointerEvent) => {
+      const up = y0 - e.clientY
+      return up > SWIPE && Math.abs(e.clientX - x0) < up * 0.7 && performance.now() - t0 < SWIPE_MS
+    }
+
+    const fire = () => {
+      disarm()
+      if (navigator.userActivation?.hasBeenActive) navigator.vibrate?.(8)
+      const s = useStore.getState()
+      if (!s.mapOpen) s.toggleMap()
+    }
 
     const onDown = (e: PointerEvent) => {
-      armed = !useStore.getState().mapOpen && e.clientY > innerHeight - EDGE
+      if (!e.isPrimary) {
+        disarm()
+        return
+      }
+      armed = !useStore.getState().mapOpen && !shortcutsOpen() && e.clientY > armLine()
       x0 = e.clientX
       y0 = e.clientY
       t0 = performance.now()
     }
-    const onUp = (e: PointerEvent) => {
-      if (!armed) return
-      armed = false
+
+    const onMove = (e: PointerEvent) => {
+      if (!armed || !e.isPrimary) return
       const up = y0 - e.clientY
       const across = Math.abs(e.clientX - x0)
-
-      if (up > SWIPE && across < up * 0.7 && performance.now() - t0 < 500) {
-        useStore.getState().toggleMap()
+      if (across > 28 && across > up) {
+        disarm()
+        return
       }
+      if (swiped(e)) {
+        fire()
+        return
+      }
+      setPull(Math.round(Math.min(1, Math.max(0, up / SWIPE)) * 50) / 50)
+    }
+
+    const onUp = (e: PointerEvent) => {
+      if (!armed || !e.isPrimary) return
+      if (swiped(e)) fire()
+      else disarm()
     }
 
     addEventListener('pointerdown', onDown, { passive: true })
+    addEventListener('pointermove', onMove, { passive: true })
     addEventListener('pointerup', onUp, { passive: true })
+    addEventListener('pointercancel', disarm, { passive: true })
     return () => {
       removeEventListener('pointerdown', onDown)
+      removeEventListener('pointermove', onMove)
       removeEventListener('pointerup', onUp)
+      removeEventListener('pointercancel', disarm)
+      disarm()
     }
   }, [coarse, textMode])
+
+  useEffect(() => {
+    const glyph = navRef.current?.querySelector<HTMLElement>("[data-kind='tilt'] .glyph")
+    if (!gyroEnabled || calm || textMode || !glyph) return
+    let raf = 0
+    let gx = 0
+    let gy = 0
+    const loop = () => {
+      raf = requestAnimationFrame(loop)
+      const g = input.gyro
+      const x = g ? Math.round(Math.max(-1, Math.min(1, g.x / GYRO_RANGE)) * 60) / 60 : 0
+      const y = g ? Math.round(Math.max(-1, Math.min(1, g.y / GYRO_RANGE)) * 60) / 60 : 0
+      if (x === gx && y === gy) return
+      gx = x
+      gy = y
+      glyph.style.translate = `${(-x * LEVEL_PX).toFixed(2)}px ${(-y * LEVEL_PX).toFixed(2)}px`
+    }
+    raf = requestAnimationFrame(loop)
+    return () => {
+      cancelAnimationFrame(raf)
+      glyph.style.translate = ''
+    }
+  }, [gyroEnabled, calm, textMode])
 
   useEffect(() => {
     if (!coarse) return
@@ -138,7 +230,7 @@ export default function Hud() {
     if (textMode) return
     const id = setInterval(() => {
       const s = useStore.getState()
-      if (s.phase !== 'idle' || s.mapOpen || s.overtureActive) {
+      if (s.phase !== 'idle' || s.mapOpen || s.overtureActive || document.querySelector('.hint')) {
         setGhost(false)
         return
       }
@@ -160,9 +252,11 @@ export default function Hud() {
   return (
     <>
       <nav
+        ref={navRef}
         className="hud"
         aria-label="Site controls"
         data-dimmed={phase === 'turn' || phase === 'flight' || overture}
+        data-text={textMode || undefined}
         style={accent}
       >
         {!textMode && (

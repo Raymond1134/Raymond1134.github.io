@@ -146,6 +146,19 @@
   to { opacity: 1; }
 }
 
+@media (pointer: coarse) and (max-width: 600px), (pointer: coarse) and (max-height: 600px) {
+  .weave-backdrop {
+    background: rgba(3, 5, 14, 0.95);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+  .weave-close {
+    background: rgba(9, 14, 28, 0.82);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+}
+
 @media (orientation: landscape) and (max-height: 480px) {
   .weave-panel { padding-top: calc(var(--sat) + 6px); padding-bottom: calc(var(--sab) + 6px); }
   .weave-hint { display: none; }

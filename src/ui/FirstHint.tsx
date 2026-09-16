@@ -8,6 +8,7 @@ const HINT_MS = 9000
 const FADE_MS = 700
 const GRACE_MS = 1500
 const DRAG_PX = 14
+const POLL_MS = 400
 
 const seen = () => {
   try {
@@ -16,6 +17,9 @@ const seen = () => {
     return false
   }
 }
+
+const ready = () =>
+  document.visibilityState === 'visible' && !document.getElementById('overture-shroud')
 
 export default function FirstHint() {
   const coarse = useStore((s) => s.coarse)
@@ -40,19 +44,22 @@ export default function FirstHint() {
       if (input.dragDistance > DRAG_PX) dismiss()
     }
 
+    let timer: ReturnType<typeof setTimeout> | undefined
+    let graceTimer: ReturnType<typeof setTimeout> | undefined
+    let poll: ReturnType<typeof setInterval> | undefined
+
     const unsub = useStore.subscribe((s, prev) => {
+      if (!timer) return
       if ((prev.phase === 'idle' && s.phase !== 'idle') || (s.mapOpen && !prev.mapOpen)) dismiss()
     })
 
-    let timer: ReturnType<typeof setTimeout> | undefined
-    let graceTimer: ReturnType<typeof setTimeout> | undefined
-
     const start = () => {
-      if (timer) return
+      if (timer || !ready()) return
+      clearInterval(poll)
+      timer = setTimeout(dismiss, HINT_MS)
       try {
         sessionStorage.setItem(KEY, '1')
       } catch {}
-      timer = setTimeout(dismiss, HINT_MS)
       graceTimer = setTimeout(() => {
         addEventListener('pointerup', onUp, { passive: true })
         addEventListener('wheel', dismiss, { passive: true })
@@ -60,21 +67,15 @@ export default function FirstHint() {
       }, GRACE_MS)
     }
 
-    const onVisible = () => {
-      if (document.visibilityState !== 'visible') return
-      document.removeEventListener('visibilitychange', onVisible)
-      start()
-    }
-
-    if (document.visibilityState === 'visible') start()
-    else document.addEventListener('visibilitychange', onVisible)
+    start()
+    if (!timer) poll = setInterval(start, POLL_MS)
 
     return () => {
       unsub()
       clearTimeout(timer)
       clearTimeout(graceTimer)
       clearTimeout(unmountTimer)
-      document.removeEventListener('visibilitychange', onVisible)
+      clearInterval(poll)
       removeEventListener('pointerup', onUp)
       removeEventListener('wheel', dismiss)
       removeEventListener('keydown', dismiss)

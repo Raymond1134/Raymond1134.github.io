@@ -100,6 +100,9 @@
     glyph-pop 480ms cubic-bezier(0.34, 1.56, 0.64, 1),
     glyph-breathe 7.69s ease-in-out 480ms infinite;
 }
+.hud[data-text] .hud-chip[data-kind='sound'][data-on] .glyph {
+  animation: glyph-pop 480ms cubic-bezier(0.34, 1.56, 0.64, 1);
+}
 
 .hud-chip:active:not([disabled]) {
   scale: 0.94;
@@ -126,17 +129,54 @@
     flex-wrap: nowrap;
     justify-content: space-around;
     gap: 4px;
-    padding: 6px max(6px, var(--sal)) calc(var(--sab) + 6px) max(6px, var(--sar));
+    padding: 16px max(6px, var(--sal)) calc(var(--sab) + 6px) max(6px, var(--sar));
     background: linear-gradient(
       to top,
-      rgb(3 5 14 / calc(0.94 * var(--dock-k, 1))) 55%,
-      rgb(3 5 14 / 0)
+      rgb(3 5 14 / calc(0.9 * var(--dock-k, 1))) 0%,
+      rgb(3 5 14 / calc(0.74 * var(--dock-k, 1))) 52%,
+      rgb(3 5 14 / 0) 100%
     );
+    box-shadow: 0 12px 0 rgb(3 5 14 / calc(0.9 * var(--dock-k, 1)));
+    touch-action: none;
+    translate: 0 calc(var(--pull, 0) * -10px);
+    transition:
+      --hud-accent 2400ms cubic-bezier(0.45, 0, 0.2, 1),
+      --dock-k 420ms ease,
+      translate 520ms cubic-bezier(0.34, 1.56, 0.64, 1);
     --hud-from: 0 16px;
     --chip-glow: 0 0 0 transparent;
   }
+  .hud[data-pulling] { transition-duration: 2400ms, 420ms, 0ms; }
+  .hud[data-text] {
+    background: linear-gradient(
+      to top,
+      rgb(6 7 14 / 0.97) 0%,
+      rgb(6 7 14 / 0.95) calc(100% - 14px),
+      rgb(6 7 14 / 0) 100%
+    );
+  }
+  .hud[data-text]::before,
+  .hud[data-text]::after { display: none; }
+
+  .hud::before {
+    content: '';
+    position: absolute;
+    left: 12%;
+    right: 12%;
+    top: 1px;
+    height: 13px;
+    background:
+      linear-gradient(90deg, transparent, color-mix(in srgb, var(--hud-accent) 72%, transparent), transparent)
+        center / 100% 1px no-repeat,
+      radial-gradient(closest-side, color-mix(in srgb, var(--hud-accent) 26%, transparent), transparent)
+        center / 100% 100% no-repeat;
+    opacity: calc((0.6 + var(--pull, 0) * 0.4) * var(--dock-k, 1));
+    pointer-events: none;
+    animation: dock-seam 7.69s ease-in-out infinite;
+  }
 
   .hud-chip {
+    position: relative;
     flex: 1 1 0;
     flex-direction: column;
     gap: 3px;
@@ -150,8 +190,66 @@
     -webkit-backdrop-filter: none;
   }
   .hud-chip .glyph { font-size: 18px; }
-  .hud-chip .label { font-size: 11px; }
-  .hud-chip[data-on] { box-shadow: none; }
+  .hud-chip .label {
+    font-size: 11px;
+    text-shadow: 0 1px 3px rgba(3, 4, 10, 0.9);
+  }
+  .hud-chip[data-on] {
+    border-color: transparent;
+    background: none;
+    box-shadow: none;
+  }
+  .hud-chip[data-on] .label { color: color-mix(in srgb, var(--hud-accent) 32%, var(--ink)); }
+  .hud-chip::after {
+    content: '';
+    position: absolute;
+    bottom: 2px;
+    left: 50%;
+    width: 4px;
+    height: 4px;
+    margin-left: -2px;
+    border-radius: 50%;
+    background: color-mix(in srgb, var(--hud-accent) 60%, #fff);
+    box-shadow: 0 0 8px 1px var(--hud-accent);
+    opacity: 0;
+    scale: 0.2;
+    transition: opacity 260ms ease, scale 460ms cubic-bezier(0.34, 1.56, 0.64, 1);
+  }
+  .hud-chip[data-on]::after {
+    opacity: 1;
+    scale: 1;
+  }
+  .hud-chip:active:not([disabled]) {
+    background: radial-gradient(
+      closest-side,
+      color-mix(in srgb, var(--hud-accent) 26%, transparent),
+      transparent
+    );
+  }
+  .hud-chip[data-kind='map']:not([data-on]) .glyph {
+    scale: calc(1 + var(--pull, 0) * 0.3);
+    opacity: calc(0.78 + var(--pull, 0) * 0.22);
+    text-shadow: 0 0 calc(var(--pull, 0) * 14px) var(--hud-accent);
+  }
+  .hud-chip[data-kind='tilt'] .glyph { transition: translate 140ms linear; }
+}
+
+@media (pointer: coarse) and (orientation: portrait) and (max-width: 600px) {
+  .hud::after {
+    content: '';
+    position: absolute;
+    top: 5px;
+    left: 50%;
+    width: 34px;
+    height: 4px;
+    margin-left: -17px;
+    border-radius: 2px;
+    background: color-mix(in srgb, var(--hud-accent) 30%, rgba(207, 224, 247, 0.6));
+    box-shadow: 0 0 10px color-mix(in srgb, var(--hud-accent) 40%, transparent);
+    opacity: calc((0.5 + var(--pull, 0) * 0.5) * var(--dock-k, 1));
+    scale: calc(1 + var(--pull, 0) * 0.5) 1;
+    pointer-events: none;
+  }
 }
 
 @media (pointer: coarse) and (orientation: landscape) and (max-height: 480px) {
@@ -163,13 +261,36 @@
     flex-direction: column;
     justify-content: center;
     gap: 2px;
-    padding: 6px max(6px, var(--sal));
+    padding: calc(var(--sat) + 6px) 12px calc(var(--sab) + 6px) max(6px, var(--sal));
     background: linear-gradient(
       to right,
-      rgb(3 5 14 / calc(0.92 * var(--dock-k, 1))) 40%,
-      rgb(3 5 14 / 0)
+      rgb(3 5 14 / calc(0.9 * var(--dock-k, 1))) 0%,
+      rgb(3 5 14 / calc(0.72 * var(--dock-k, 1))) 55%,
+      rgb(3 5 14 / 0) 100%
     );
+    translate: none;
     --hud-from: -16px 0;
+  }
+  .hud[data-text] {
+    background: linear-gradient(
+      to right,
+      rgb(6 7 14 / 0.97) 0%,
+      rgb(6 7 14 / 0.95) calc(100% - 10px),
+      rgb(6 7 14 / 0) 100%
+    );
+  }
+  .hud::before {
+    left: auto;
+    right: 0;
+    top: 16%;
+    bottom: 16%;
+    width: 13px;
+    height: auto;
+    background:
+      linear-gradient(180deg, transparent, color-mix(in srgb, var(--hud-accent) 72%, transparent), transparent)
+        center / 1px 100% no-repeat,
+      radial-gradient(closest-side, color-mix(in srgb, var(--hud-accent) 26%, transparent), transparent)
+        center / 100% 100% no-repeat;
   }
   .hud-chip { flex: 0 0 auto; min-width: 58px; }
 }
@@ -181,6 +302,11 @@
     box-shadow: 0 0 0 transparent;
   }
   55% { box-shadow: var(--chip-glow); }
+}
+
+@keyframes dock-seam {
+  0%, 100% { scale: 0.82; }
+  50% { scale: 1; }
 }
 
 @keyframes hud-chip-out {
@@ -246,6 +372,29 @@
     hud-chip-in 680ms cubic-bezier(0.22, 1, 0.36, 1) calc(var(--n, 0) * 60ms + 80ms) backwards,
     hud-invite 1.5s ease;
 }
+.hud-chip[data-invite] .glyph { animation: glyph-invite 1.5s ease; }
+@keyframes glyph-invite {
+  50% {
+    scale: 1.25;
+    opacity: 1;
+    color: color-mix(in srgb, var(--hud-accent) 60%, #fff);
+    text-shadow:
+      0 0 14px var(--hud-accent),
+      0 0 2px var(--hud-accent);
+  }
+}
+
+@media (pointer: coarse) and (max-width: 600px), (pointer: coarse) and (max-height: 600px) {
+  .hud-chip[data-invite] {
+    animation: hud-chip-in 680ms cubic-bezier(0.22, 1, 0.36, 1) calc(var(--n, 0) * 60ms + 80ms) backwards;
+  }
+  .hud-ghost {
+    bottom: calc(var(--sab) + 90px);
+    background: rgba(9, 14, 28, 0.72);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+}
 
 @media (prefers-reduced-motion: reduce) {
   .hud,
@@ -256,9 +405,15 @@
   .hud-chip .glyph,
   .hud-chip[data-on] .glyph,
   .hud-chip[data-kind='sound'][data-on] .glyph,
+  .hud[data-text] .hud-chip[data-kind='sound'][data-on] .glyph,
   .hud-chip[data-invite],
+  .hud-chip[data-invite] .glyph,
   .hud[data-dimmed='true'] .hud-chip,
+  .hud::before,
   .hud-ghost { animation: none; }
+  .hud { translate: none; }
+  .hud-chip::after,
+  .hud-chip[data-kind='tilt'] .glyph { transition: none; }
   .hud[data-dimmed='true'] .hud-chip { opacity: 0; }
   .hud-chip:active:not([disabled]) { scale: none; }
   .hud-ghost::before { display: none; }

@@ -115,6 +115,18 @@ button {
   .hud-ghost:focus-visible { outline: 2px solid CanvasText; }
 }
 
+:root[data-q='low'] :is(.hud-chip, .hint, .hud-ghost, .weave-backdrop, .weave-close, .shortcuts-veil, .shortcuts-panel) {
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+:root[data-q='low'] :is(.hint, .hud-ghost) { background-color: rgba(9, 14, 28, 0.8); }
+@media (pointer: fine), (min-width: 601px) and (min-height: 601px) {
+  :root[data-q='low'] .hud-chip { background-color: rgba(9, 14, 28, 0.8); }
+}
+:root[data-q='low'] .weave-backdrop { background-color: rgba(3, 5, 14, 0.95); }
+:root[data-q='low'] .shortcuts-veil { background-color: rgba(3, 5, 14, 0.86); }
+:root[data-q='low'] .shortcuts-panel { background: rgba(12, 16, 32, 0.92); }
+
 a.weave-node:focus-visible .hit { stroke: var(--aether); stroke-width: 3.5; }
 
 .sr-only {
