@@ -12,6 +12,8 @@ uniform float uExposure;
 uniform float uSpan;
 uniform vec2  uRing;
 uniform vec2  uRingGain;
+uniform float uSpike;
+uniform vec2  uSpin;
 
 varying vec2 vQ;
 
@@ -36,6 +38,16 @@ void main() {
     vec3 frontCol = mix(uCore, vec3(1.0), 0.4);
     vec3 trailCol = gelFringe(uEdge, 1.0, 0.5);
     lit += frontCol * (front.x + front.y) + trailCol * ((trail.x + trail.y) * 0.8);
+  }
+
+  if (uSpike > 0.0) {
+    vec2 sq = abs(vec2(uSpin.x * q.x - uSpin.y * q.y, uSpin.y * q.x + uSpin.x * q.y));
+    vec2 dq = vec2(sq.x + sq.y, abs(sq.x - sq.y)) * 0.70710678;
+    float thin = min(70.0, 0.9 / max(fwidth(q.x), 1e-4));
+    float star = exp(-sq.y * thin - sq.x * 2.4) + exp(-sq.x * thin - sq.y * 2.4);
+    star += 0.35 * exp(-dq.y * thin - dq.x * 5.0);
+    star *= smoothstep(0.04, 0.3, sqrt(r2)) * max(1.0 - r2, 0.0);
+    lit += mix(uCore, vec3(1.0), 0.3) * (star * uSpike);
   }
 
 #if PHONE_GRADE

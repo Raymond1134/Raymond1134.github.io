@@ -3,7 +3,8 @@ uniform float uPixelRatio;
 uniform float uOrbitRadius;
 uniform float uClusters;
 uniform float uClusterSeed;
-uniform float uScale;
+uniform float uOrbit;
+uniform float uBurst;
 
 attribute vec3  aSeed;
 attribute float aCluster;
@@ -60,12 +61,12 @@ void main() {
   vec3 P    = -N * sw + radialv * cw;
   vec3 Q    = -e1 * sin(pa) + e2 * cos(pa);
 
-  float a = uTime * speed + phase - u * 0.55 * sign(speed);
+  float a = uOrbit * speed + phase - u * 0.55 * sign(speed);
 
-  vec3 pos = (P * cos(a) + Q * sin(a)) * radius;
+  vec3 pos = (P * cos(a) + Q * sin(a)) * radius * (1.0 + uBurst * (0.55 + 0.5 * s2));
 
   vec3 jit = vec3(s0, s1, fract(s0 * 3.7 + s1 * 5.3)) - 0.5;
-  pos += jit * (0.28 + u * 0.95);
+  pos += jit * (0.28 + u * 0.95) * (1.0 + uBurst * 1.5);
 
   vec4 mv = modelViewMatrix * vec4(pos, 1.0);
   gl_Position = projectionMatrix * mv;
@@ -74,9 +75,9 @@ void main() {
 
   float sz = fract(s1 * 5.77 + s2 * 2.13);
   gl_PointSize = clamp(
-    uPixelRatio * (0.8 + sz * sz * 4.0) * (1.0 - u * 0.45) * (68.0 * uScale / dist),
+    uPixelRatio * (0.8 + sz * sz * 4.0) * (1.0 - u * 0.45) * (68.0 / dist),
     0.6,
-    12.0 * uPixelRatio * uScale
+    12.0 * uPixelRatio
   );
 
   vGain = (0.3 + 0.7 * s2) * (0.55 + 0.45 * sin(uTime * (0.6 + s0 * 1.2) + phase * 3.0));

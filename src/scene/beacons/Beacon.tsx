@@ -6,7 +6,7 @@ import type { GraphNode } from '@/content/layout'
 import { hash01 } from '@/content/layout'
 import { site } from '@/content'
 import { useStore, TRAVEL_LANDING } from '@/state/store'
-import { input, TAP_SLOP } from '@/input/input'
+import { input, TAP_SLOP, stillFor } from '@/input/input'
 import beaconVert from '@/shaders/beacon/beacon.vert'
 import coreFrag from '@/shaders/beacon/core.frag'
 import motesVert from '@/shaders/beacon/motes.vert'
@@ -65,7 +65,22 @@ const RING_SPAN = CALM ? 1 : 2.1
 const RING_FROM = 0.3
 const RING_TO = CALM ? 0.55 : 1.85
 const RING_GAIN = CALM ? 0.35 : 0.85
-const RING_K = { hover: 0.7, press: 0.9, goal: 1.0, land: 1.0 } as const
+const RING_K = { hover: 0.5, press: 0.9, goal: 1.0, land: 1.0, beckon: 0.35 } as const
+
+const ORBIT_REST = CALM ? 0.5 : 1
+const ORBIT_HOVER = CALM ? 0 : 2.4
+const ORBIT_BOOST = CALM ? 0 : 1.2
+const BURST_LIFE = 1.3
+
+const SPIKE_HOVER = 1.1
+const SPIKE_CURRENT = 0.25
+const SPIKE_BOOST = 0.35
+const SPIKE_PHONE = NO_COMPOSER ? 1.4 : 1
+const SPIKE_SPIN = CALM ? 0 : 0.05
+
+const BECKON_AFTER = 6
+const BECKON_PERIOD = 7
+const BECKON_SWEEP = 0.3
 
 interface Ring {
   age: number
@@ -195,6 +210,8 @@ function glowMat(coreW: number, skirt: number): THREE.ShaderMaterial {
       uSpan: { value: 1 },
       uRing: { value: new THREE.Vector2() },
       uRingGain: { value: new THREE.Vector2() },
+      uSpike: { value: 0 },
+      uSpin: { value: new THREE.Vector2(1, 0) },
     },
     transparent: true,
     depthWrite: false,
@@ -278,7 +295,8 @@ function buildAssets(
         uOrbitRadius: { value: ORBIT_RADIUS },
         uClusters: { value: CLUSTERS },
         uClusterSeed: { value: clusterSeed },
-        uScale: { value: 1 },
+        uOrbit: { value: 0 },
+        uBurst: { value: 0 },
       },
       ...shared,
     }),
@@ -329,6 +347,9 @@ export default function Beacon({ node, role }: Props) {
   const wasHovered = useRef(false)
   const wasGoal = useRef(false)
   const wasLanded = useRef(false)
+  const orbitT = useRef(0)
+  const burstT = useRef(1)
+  const beckonCyc = useRef(0)
   const hovered = useStore((s) => s.hoveredId === node.id)
   const setHovered = useStore((s) => s.setHovered)
   const travelTo = useStore((s) => s.travelTo)
@@ -447,7 +468,10 @@ export default function Beacon({ node, role }: Props) {
 
     if (isGoal && !wasGoal.current) fireRing(rings.current, RING_K.goal)
     wasGoal.current = isGoal
-    if (landed && !wasLanded.current) fireRing(rings.current, RING_K.land)
+    if (landed && !wasLanded.current) {
+      fireRing(rings.current, RING_K.land)
+      if (!CALM) burstT.current = 0
+    }
     wasLanded.current = landed
 
     queueT.current += ((st.queuedId === node.id ? 1 : 0) - queueT.current) * (1 - Math.pow(0.001, dt))
@@ -483,7 +507,11 @@ export default function Beacon({ node, role }: Props) {
       ROLE_GAIN[role] * flicker * MOTE_DENSITY_TRIM * (role === 'distant' ? 0.5 : 1) *
       (1 + h * 0.6) * moteFar * distAtt * adm * boost * pd
     mm.uniforms.uPixelRatio.value = state.gl.getPixelRatio()
-    mm.uniforms.uScale.value = 1
+    orbitT.current += dt * (ORBIT_REST + ORBIT_HOVER * h + ORBIT_BOOST * Math.max(0, boost - 1))
+    mm.uniforms.uOrbit.value = orbitT.current
+    burstT.current = Math.min(1, burstT.current + dt / BURST_LIFE)
+    const bt = burstT.current
+    mm.uniforms.uBurst.value = bt < 1 ? EASE.hearth(Math.min(1, bt * 5)) * (1 - EASE.glide(bt)) : 0
     motes.current.scale.setScalar(1 + h * 0.6)
 
     const outerW = Math.max(HALO_OUTER, d * 0.016)
@@ -496,6 +524,28 @@ export default function Beacon({ node, role }: Props) {
     const coolTo = role === 'reachable' ? CLICK_BLUE_DEEP : DEEP_TINT
     ;(hm.uCore.value as THREE.Color).copy(haloCore).lerp(coolTo, 1 - distAtt)
     ;(hm.uEdge.value as THREE.Color).copy(outerColor).lerp(coolTo, 1 - distAtt)
+
+    const spikeK =
+      SPIKE_HOVER * h + (role === 'current' ? SPIKE_CURRENT : 0) + SPIKE_BOOST * Math.max(0, boost - 1)
+    hm.uSpike.value = hm.uGain.value * spikeK * SPIKE_PHONE
+    const spinA = seed + t * SPIKE_SPIN
+    ;(hm.uSpin.value as THREE.Vector2).set(Math.cos(spinA), Math.sin(spinA))
+
+    if (role === 'reachable' && !canHoverPointer && !CALM && st.phase === 'idle') {
+      const cur = st.graph.nodes.get(st.currentId)
+      let sweep = hash01(node.id, 13)
+      if (cur) {
+        camRight.set(1, 0, 0).applyQuaternion(state.camera.quaternion)
+        camUp.set(0, 1, 0).applyQuaternion(state.camera.quaternion)
+        probeA.copy(node.worldPosition).sub(cur.worldPosition)
+        sweep = (Math.atan2(-probeA.dot(camUp), probeA.dot(camRight)) / (Math.PI * 2) + 1) % 1
+      }
+      const cyc = (t / BECKON_PERIOD + sweep * BECKON_SWEEP) % 1
+      if (cyc + 0.5 < beckonCyc.current && stillFor() > BECKON_AFTER) {
+        fireRing(rings.current, RING_K.beckon)
+      }
+      beckonCyc.current = cyc
+    }
 
     const ra = rings.current[0]
     const rb = rings.current[1]
