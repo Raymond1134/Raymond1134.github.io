@@ -6,6 +6,7 @@ uniform float uTime;
 uniform vec3  uCenter;
 uniform float uFadeStart;
 uniform float uFadeEnd;
+uniform vec2  uFocus;
 uniform vec4  uLights[6];
 uniform vec3  uLightCols[6];
 uniform float uTorch;
@@ -65,7 +66,7 @@ void main() {
                   + isMote * (4.0 + 4.0 * u);
   float cap = (isDust * 7.0 + isFly * 14.0 + isMote * 24.0) * uPixelRatio;
 
-  vDefocus = 1.0 - smoothstep(3.0, 18.0, dist);
+  vDefocus = 1.0 - smoothstep(uFocus.x, uFocus.y, dist);
   float spread = 1.0 + 1.6 * vDefocus;
 
   float pxRaw = uSize * uPixelRatio * sizeClass * (130.0 / dist);

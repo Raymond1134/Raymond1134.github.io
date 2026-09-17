@@ -44,10 +44,18 @@ const torchCol = new THREE.Color(site.meta.themeColorAccent).lerp(new THREE.Colo
 
 const STREAK_CAP = NO_COMPOSER ? 22 : 40
 
+const SPIN_MAX = 2.5
+const SPIN_GAIN = 1.1 * WAKE_CALM
+const FOCUS = {
+  rest: new THREE.Vector2(3, 18),
+  flight: new THREE.Vector2(1.2, 7),
+  land: new THREE.Vector2(4, 26),
+} as const
+
 const forceScale = 1 / (TAU * TAU)
 const damping = Math.pow(BASE.damping, 1 / TAU)
 
-const field = { center: new THREE.Vector3(), init: false }
+const field = { center: new THREE.Vector3(), init: false, maxSpeed: MAX_SPEED }
 
 const wake = { speed: 0, live: false }
 const ptrPrev = new THREE.Vector3()
@@ -61,6 +69,11 @@ const handoff: {
 
 const camPrev = new THREE.Vector3()
 const camVel = new THREE.Vector3()
+
+const qPrev = new THREE.Quaternion()
+const qd = new THREE.Quaternion()
+const spin = new THREE.Vector3()
+const spinT = new THREE.Vector3()
 
 const tmpV = new THREE.Vector3()
 const rayV = new THREE.Vector3()
@@ -124,6 +137,7 @@ function buildAssets(gl: THREE.WebGLRenderer, size: number, opacity: number): Fi
     uPointer: { value: new THREE.Vector4(0, 0, 0, 0) },
     uPointerVel: { value: new THREE.Vector3() },
     uCam: { value: new THREE.Vector3() },
+    uSpin: { value: new THREE.Vector4(0, 0, 0, 0) },
     uPulseOrigin: { value: new THREE.Vector3() },
     uPulseRadius: { value: -1e3 },
     uPulseBand: { value: 8 },
@@ -171,6 +185,7 @@ function buildAssets(gl: THREE.WebGLRenderer, size: number, opacity: number): Fi
       uCenter: { value: new THREE.Vector3() },
       uFadeStart: { value: FADE_START },
       uFadeEnd: { value: FADE_END },
+      uFocus: { value: FOCUS.rest.clone() },
       uOpacity: { value: opacity },
       uSpeedScale: { value: (BASE.speedScale / TAU) * COLOR_WARMTH * CALM_K },
       uFogDensity: { value: 0.01 },
@@ -285,12 +300,22 @@ export default function ParticleField() {
     if (!field.init) {
       field.center.copy(cam)
       camPrev.copy(cam)
+      qPrev.copy(state.camera.quaternion)
       field.init = true
     }
-    tmpV.copy(cam).sub(camPrev).divideScalar(Math.max(Math.min(rawDt, 1 / 20), 1e-3))
+    const frameDt = Math.max(Math.min(rawDt, 1 / 20), 1e-3)
+    tmpV.copy(cam).sub(camPrev).divideScalar(frameDt)
     camVel.lerp(tmpV, 1 - Math.exp(-dt / 0.05))
     camPrev.copy(cam)
+
+    qd.copy(qPrev).invert().premultiply(state.camera.quaternion)
+    if (s.phase === 'flight' || s.phase === 'fade') spinT.set(0, 0, 0)
+    else spinT.set(qd.x, qd.y, qd.z).multiplyScalar((qd.w < 0 ? -2 : 2) / frameDt).clampLength(0, SPIN_MAX)
+    spin.lerp(spinT, 1 - Math.exp(-dt / 0.15))
+    qPrev.copy(state.camera.quaternion)
+
     const ft = THREE.MathUtils.clamp((s.travelClock - TRAVEL.turn) / TRAVEL.flight, 0, 1)
+    field.maxSpeed = THREE.MathUtils.damp(field.maxSpeed, MAX_SPEED * (s.phase === 'flight' ? 2 : 1), LAMBDA.ease, dt)
     const tau = s.phase === 'flight' ? 0.35 : 2.5
     field.center.lerp(cam, 1 - Math.exp(-dt / tau))
     tmpV.copy(field.center).sub(cam)
@@ -309,6 +334,11 @@ export default function ParticleField() {
     const streakT = CALM || s.phase !== 'flight' ? 0 : Math.pow(Math.sin(ft * Math.PI), 0.8)
     mu.uStreak.value = THREE.MathUtils.damp(mu.uStreak.value as number, streakT, LAMBDA.quick, dt)
     ;(mu.uCamVel.value as THREE.Vector3).copy(camVel)
+
+    const focusT = s.phase === 'flight' ? FOCUS.flight : s.phase === 'settle' ? FOCUS.land : FOCUS.rest
+    const focus = mu.uFocus.value as THREE.Vector2
+    focus.x = THREE.MathUtils.damp(focus.x, focusT.x, LAMBDA.ease, dt)
+    focus.y = THREE.MathUtils.damp(focus.y, focusT.y, LAMBDA.ease, dt)
 
     mu.uReveal.value = worldEvents.reveal
     ;(mu.uRevealOrigin.value as THREE.Vector3).copy(worldEvents.revealOrigin)
@@ -366,10 +396,11 @@ export default function ParticleField() {
       vu.uTime.value = simTime
       vu.uDt.value = velDt.current
       vu.uBreath.value = breath(t)
-      vu.uMaxSpeed.value = MAX_SPEED * (s.phase === 'flight' ? 2 : 1)
+      vu.uMaxSpeed.value = field.maxSpeed
       ;(vu.uPointer.value as THREE.Vector4).set(pe.pos.x, pe.pos.y, pe.pos.z, pe.w)
       ;(vu.uPointerVel.value as THREE.Vector3).copy(ptrVel)
       ;(vu.uCam.value as THREE.Vector3).copy(cam)
+      ;(vu.uSpin.value as THREE.Vector4).set(spin.x, spin.y, spin.z, spin.lengthSq() > 1e-6 ? SPIN_GAIN : 0)
       ;(vu.uPulseOrigin.value as THREE.Vector3).copy(pl.origin)
       vu.uPulseRadius.value = pulseLive ? age * pl.speed : -1e3
       vu.uPulseBand.value = pl.band

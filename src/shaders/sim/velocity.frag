@@ -14,6 +14,7 @@ uniform float uBreath;
 uniform vec4  uPointer;
 uniform vec3  uPointerVel;
 uniform vec3  uCam;
+uniform vec4  uSpin;
 uniform vec3  uPulseOrigin;
 uniform float uPulseRadius;
 uniform float uPulseBand;
@@ -88,6 +89,12 @@ void main() {
     }
   }
 
+  if (uSpin.w > 0.001) {
+    vec3 r = pos - uCam;
+    float f = exp(-dot(r, r) / 1600.0);
+    vel += cross(uSpin.xyz, r) * (uSpin.w * f * (0.5 + 0.5 * seed) * uDt);
+  }
+
   if (uPulseForce > 0.001) {
     vec3 rp = pos - uPulseOrigin;
     float rd = max(length(rp), 1e-3);
@@ -95,7 +102,7 @@ void main() {
     vel += (rp / rd) * (uPulseForce * band * uDt);
   }
 
-  float isFly = step(0.72, seed) * (1.0 - step(0.97, seed));
+  float isFly = step(0.78, seed) * (1.0 - step(0.97, seed));
   if (uAttract.w > 0.001 && isFly > 0.5) {
     vec3 ap = uAttract.xyz - pos;
     float ad2 = dot(ap, ap);
