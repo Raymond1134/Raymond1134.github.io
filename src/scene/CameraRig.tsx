@@ -24,6 +24,9 @@ const driftFwd = new THREE.Vector3()
 
 const FOV_REST = 62
 const FOV_GATHER = 60.5
+const EXHALE_LAND = 2.3
+const EXHALE_PICARDY = 3.5
+const EXHALE_SPAN = 1.6
 
 const CALM = typeof matchMedia !== 'undefined' && matchMedia('(prefers-reduced-motion: reduce)').matches
 const DRIFT_LAT = CALM ? 0 : 1.2
@@ -35,6 +38,9 @@ const PAR_X = CALM ? 0 : 1.2
 const PAR_Y = CALM ? 0 : 0.6
 const PAR_TILT_X = CALM ? 0 : 2.2
 const PAR_TILT_Y = CALM ? 0 : 1.6
+
+const WINDUP = 1.2
+const WINDUP_COMPACT = 0.6
 
 const ROLL_A = CALM ? 0 : 1.6 * (Math.PI / 180)
 const ROLL_B = CALM ? 0 : 0.7 * (Math.PI / 180)
@@ -105,10 +111,11 @@ function approachTo(from: THREE.Vector3, node: GraphNode, distance: number, out:
   return out
 }
 
-function applyFov(camera: THREE.PerspectiveCamera, fov: number, height: number) {
+function applyFov(camera: THREE.PerspectiveCamera, fov: number, height: number, zoom: number) {
   camera.fov = fov
+  camera.zoom = zoom
   camera.updateProjectionMatrix()
-  setLookScale((2 * Math.tan(THREE.MathUtils.degToRad(fov) / 2)) / Math.max(1, height))
+  setLookScale((2 * Math.tan(THREE.MathUtils.degToRad(fov) / 2)) / zoom / Math.max(1, height))
 }
 
 const ACCEL_END = 0.45
@@ -127,6 +134,8 @@ export default function CameraRig() {
 
   const frozenPos = useRef<THREE.Vector3 | null>(null)
   const frozenQuat = useRef(new THREE.Quaternion())
+  const launchPos = useRef(new THREE.Vector3())
+  const fovFrom = useRef(FOV_REST)
 
   const approach = useRef(new THREE.Vector3())
 
@@ -160,6 +169,7 @@ export default function CameraRig() {
     idleT.current +=
       (idleTarget - idleT.current) * (1 - Math.exp(-(idleTarget > idleT.current ? 0.67 : 6) * dt))
 
+    const st = worldEvents.strike
     if (prevPhase.current === 'flight' && s.phase === 'settle') {
       const pl = worldEvents.pulse
       pl.origin.copy(current.worldPosition)
@@ -168,27 +178,34 @@ export default function CameraRig() {
       pl.band = 8
       pl.force = 6
       pl.glow = 0.3
-      const st = worldEvents.strike
       st.at = t
       const earned = s.travelCount === 2 && picardyReady()
       st.kind = earned ? 'picardy' : 'land'
       st.mag = earned ? 1.7 : 1
       st.origin.copy(current.worldPosition)
       if (earned) playPicardy(current.id)
+      if (s.coarse && !CALM && navigator.userActivation?.hasBeenActive) navigator.vibrate?.(earned ? [14, 50, 22] : 11)
     }
     if (s.phase !== 'fade') fadeSnapped.current = false
     prevPhase.current = s.phase
 
     let fov: number
     if (s.phase === 'turn') {
-      fov = THREE.MathUtils.lerp(FOV_REST, FOV_GATHER, EASE.glide(Math.min(1, s.travelClock / TRAVEL.turn)))
+      if (!frozenPos.current) fovFrom.current = camera.fov
+      fov = THREE.MathUtils.lerp(fovFrom.current, FOV_GATHER, EASE.glide(Math.min(1, s.travelClock / TRAVEL.turn)))
     } else if (s.phase === 'flight') {
       const ft = THREE.MathUtils.clamp((s.travelClock - TRAVEL.turn) / TRAVEL.flight, 0, 1)
       fov = THREE.MathUtils.lerp(FOV_GATHER, FOV_REST, ft) + 4.5 * swellTight(ft)
     } else {
       fov = THREE.MathUtils.damp(camera.fov, FOV_REST + worldEvents.camFov, 8, dt)
     }
-    if (Math.abs(fov - camera.fov) > 0.01) applyFov(camera, fov, height)
+    const la = t - st.at
+    const exhale =
+      !CALM && (st.kind === 'land' || st.kind === 'picardy') && la > 0 && la < EXHALE_SPAN
+        ? (st.kind === 'picardy' ? EXHALE_PICARDY : EXHALE_LAND) * Math.exp(-la * 3.5) * (1 - Math.exp(-la * 24))
+        : 0
+    const zoom = exhale > 0 ? Math.tan(THREE.MathUtils.degToRad(fov) / 2) / Math.tan(THREE.MathUtils.degToRad(fov + exhale) / 2) : 1
+    if (Math.abs(fov - camera.fov) > 0.01 || zoom !== camera.zoom) applyFov(camera, fov, height, zoom)
 
     if (s.phase === 'turn') {
       const target = s.pendingId ? s.graph.nodes.get(s.pendingId) : null
@@ -206,7 +223,8 @@ export default function CameraRig() {
       driftOff.current.set(0, 0, 0)
       const tt = THREE.MathUtils.clamp(s.travelClock / TRAVEL.turn, 0, 1)
       driftFwd.set(0, 0, 1).applyQuaternion(frozenQuat.current)
-      camera.position.copy(frozenPos.current).addScaledVector(driftFwd, 0.8 * EASE.gather(tt))
+      camera.position.copy(frozenPos.current).addScaledVector(driftFwd, (s.compact ? WINDUP_COMPACT : WINDUP) * EASE.glide(tt))
+      launchPos.current.copy(camera.position)
 
       const e = EASE.glide(tt)
       baseTowards(camera.position, dest, toQuat)
@@ -226,7 +244,7 @@ export default function CameraRig() {
     if (s.phase === 'flight') {
       const ft = THREE.MathUtils.clamp((s.travelClock - TRAVEL.turn) / TRAVEL.flight, 0, 1)
       const e = flightEase(ft)
-      const from = frozenPos.current ?? camera.position
+      const from = frozenPos.current ? launchPos.current : camera.position
       const to = anchorFor(tmpB, current, dist, approach.current)
       camera.position.copy(tmpA.copy(from).lerp(to, e * (1 + 0.02 * swellTight(ft))))
 
