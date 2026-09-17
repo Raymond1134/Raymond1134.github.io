@@ -1,4 +1,4 @@
 import { useStore } from '@/state/store'
+import { BOOT_TIER } from '@/perf/gpuTier'
 
-const boot = useStore.getState()
-export const NO_COMPOSER = boot.compact || boot.quality === 'low'
+export const NO_COMPOSER = useStore.getState().compact || BOOT_TIER === 'low'

@@ -27,7 +27,8 @@ export default defineConfig({
           minSize: 0,
           groups: [
             { name: 'three', test: /node_modules[\\/]three[\\/]/ },
-            { name: 'r3f', test: /node_modules[\\/]@react-three[\\/]/ },
+            { name: 'r3f', test: /node_modules[\\/]@react-three[\\/](?!postprocessing)/ },
+            { name: 'post', test: /node_modules[\\/](@react-three[\\/])?postprocessing[\\/]/ },
           ],
         },
       },

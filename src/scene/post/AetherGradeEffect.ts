@@ -8,6 +8,7 @@ export class AetherGradeEffect extends Effect {
       uniforms: new Map<string, THREE.Uniform>([
         ['uExposure', new THREE.Uniform(1)],
         ['uHold', new THREE.Uniform(hold)],
+        ['uRush', new THREE.Uniform(0)],
         ['uRes', new THREE.Uniform(new THREE.Vector2(1, 1))],
         ['uDitherK', new THREE.Uniform(ditherK)],
       ]),
@@ -20,5 +21,13 @@ export class AetherGradeEffect extends Effect {
 
   set exposure(v: number) {
     this.uniforms.get('uExposure')!.value = v
+  }
+
+  set hold(v: number) {
+    this.uniforms.get('uHold')!.value = v
+  }
+
+  set rush(v: number) {
+    this.uniforms.get('uRush')!.value = v
   }
 }
