@@ -31,6 +31,8 @@ const GLOW_PAD_H = 14
 
 const HOVER_DIM = 0.55
 
+const MIST_K = useStore.getState().reducedMotion ? 0.3 : 1
+
 const proj = new THREE.Vector3()
 
 const STAGGER = { plate: 0, title: 0.18, subtitle: 0.3, motes: 0.38, body: 0.5, media: 0.6 } as const
@@ -154,7 +156,7 @@ export default function HoloPanel() {
 
     const mat = materialRef.current
     if (mat) {
-      mat.uniforms.uTime.value = state.clock.elapsedTime
+      mat.uniforms.uTime.value = state.clock.elapsedTime * MIST_K
       mat.uniforms.uBreath.value = breath(state.clock.elapsedTime)
       mat.uniforms.uExposure.value = worldEvents.grade.exposure
       mat.uniforms.uOpacity.value = fade

@@ -163,6 +163,31 @@ function labelOverPanel(camera: THREE.Camera, center: THREE.Vector3, halfW: numb
 const QUAD = new THREE.PlaneGeometry(2, 2)
 QUAD.boundingSphere = new THREE.Sphere(new THREE.Vector3(), 1e5)
 
+const CORE_GEO = new THREE.IcosahedronGeometry(1.45, 2)
+const HIT_GEO = new THREE.SphereGeometry(1, 12, 12)
+
+const FLICKER_K = CALM ? 0.35 : 1
+const TIME_K = CALM ? 0.35 : 1
+const MOTE_ROLE = { current: 1, reachable: 1, distant: 0.45 } as const
+const MOTE_FX = { full: 1, reduced: 0.75, off: 0.5 } as const
+const MOTE_REACH = 8
+
+const frustum = new THREE.Frustum()
+const viewProj = new THREE.Matrix4()
+const cullSphere = new THREE.Sphere()
+const frustumAt = { stamp: -1 }
+
+function viewFrustum(camera: THREE.Camera, stamp: number) {
+  if (frustumAt.stamp !== stamp) {
+    frustumAt.stamp = stamp
+    camera.updateMatrixWorld()
+    frustum.setFromProjectionMatrix(
+      viewProj.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse),
+    )
+  }
+  return frustum
+}
+
 const CRYSTAL_R = 0.92
 const CRYSTAL_GEO = (() => {
   const g = new THREE.IcosahedronGeometry(CRYSTAL_R, 0).toNonIndexed()
@@ -353,12 +378,12 @@ export default function Beacon({ node, role }: Props) {
   const hovered = useStore((s) => s.hoveredId === node.id)
   const setHovered = useStore((s) => s.setHovered)
   const travelTo = useStore((s) => s.travelTo)
-  const phase = useStore((s) => s.phase)
-  const pendingId = useStore((s) => s.pendingId)
+  const idle = useStore((s) => s.phase === 'idle')
   const canHoverPointer = useStore((s) => s.hover)
   const coarse = useStore((s) => s.coarse)
   const compact = useStore((s) => s.compact)
   const quality = useStore((s) => s.quality)
+  const fx = useStore((s) => s.fx)
   const color = useMemo(() => new THREE.Color(node.color ?? BEACON_DEFAULT_COLOR), [node.color])
 
   const outerColor = useMemo(() => {
@@ -389,7 +414,7 @@ export default function Beacon({ node, role }: Props) {
   }, [color, role])
 
   const atmoOn =
-    !(quality === 'low' || compact) && (quality !== 'medium' || role === 'current')
+    fx === 'full' && !(quality === 'low' || compact) && (quality !== 'medium' || role === 'current')
 
   const clusterSeed = useMemo(() => hash01(node.id, 41) * 97.3, [node.id])
   const seed = useMemo(() => hash01(node.id, 7) * Math.PI * 2, [node.id])
@@ -409,7 +434,7 @@ export default function Beacon({ node, role }: Props) {
     }
   }, [color, coolColor, clusterSeed, node.id])
 
-  const interactive = role === 'reachable' && phase === 'idle'
+  const interactive = role === 'reachable' && idle
 
   useFrame((state, rawDt) => {
     if (!assets) return
@@ -428,9 +453,10 @@ export default function Beacon({ node, role }: Props) {
 
     const flicker =
       0.84 +
-      0.10 * Math.sin(t * 1.13 + seed) +
-      0.06 * Math.sin(t * 2.37 + seed * 2.1) +
-      0.04 * Math.sin(t * 0.61 + seed * 3.7)
+      FLICKER_K *
+        (0.10 * Math.sin(t * 1.13 + seed) +
+          0.06 * Math.sin(t * 2.37 + seed * 2.1) +
+          0.04 * Math.sin(t * 0.61 + seed * 3.7))
 
     const d = state.camera.position.distanceTo(node.worldPosition)
     const nearAtt = THREE.MathUtils.smoothstep(d, 3, 10)
@@ -459,10 +485,9 @@ export default function Beacon({ node, role }: Props) {
         ack *= 1 + 0.2 * Math.sin((sg / 0.6) * Math.PI) * (0.7 + 0.3 * Math.sin(sg * Math.PI * 10))
     }
 
-    const isGoal =
-      phase === 'turn' ? pendingId === node.id : phase !== 'idle' && role === 'current'
+    const isGoal = st.phase !== 'idle' && (st.pendingId ?? st.currentId) === node.id
     const landed =
-      st.phase === 'settle' && role === 'current' && st.travelClock - TRAVEL_LANDING < 0.15
+      st.phase === 'settle' && st.currentId === node.id && st.travelClock - TRAVEL_LANDING < 0.15
     const boost = (boostT.current +=
       ((landed ? 2.3 : isGoal ? 1.8 : 1) - boostT.current) * (1 - Math.pow(0.02, dt)))
 
@@ -491,18 +516,15 @@ export default function Beacon({ node, role }: Props) {
       LUM.nucleusMax,
       Math.min(1, h + Math.max(0, boost - 1)),
     ) * (role === 'current' ? 1 - 0.5 * worldEvents.panelDim : 1)
-    cm.uniforms.uTime.value = t
+    cm.uniforms.uTime.value = t * TIME_K
     cm.uniforms.uExposure.value = worldEvents.grade.exposure
     mm.uniforms.uExposure.value = worldEvents.grade.exposure
 
     const moteFar = 1 - THREE.MathUtils.smoothstep(d, 140, 300)
-    motes.current.visible = moteFar > 0.01 && adm > 0.01
-    assets.moteGeo.setDrawRange(
-      0,
-      Math.min(MOTE_COUNT, d < 140 ? MOTE_TIER[quality] : Math.ceil(MOTE_TIER[quality] * 0.3)),
-    )
+    const moteBudget = MOTE_TIER[quality] * MOTE_ROLE[role] * MOTE_FX[fx] * (d < 140 ? 1 : 0.3)
+    assets.moteGeo.setDrawRange(0, Math.min(MOTE_COUNT, Math.ceil(moteBudget)))
 
-    mm.uniforms.uTime.value = t
+    mm.uniforms.uTime.value = t * TIME_K
     mm.uniforms.uIntensity.value =
       ROLE_GAIN[role] * flicker * MOTE_DENSITY_TRIM * (role === 'distant' ? 0.5 : 1) *
       (1 + h * 0.6) * moteFar * distAtt * adm * boost * pd
@@ -560,6 +582,15 @@ export default function Beacon({ node, role }: Props) {
     ;(hm.uRing.value as THREE.Vector2).set(ringRadius(ra), ringRadius(rb))
     ;(hm.uRingGain.value as THREE.Vector2).set(ga * ringBase, gb * ringBase)
 
+    cullSphere.center.copy(node.worldPosition)
+    cullSphere.radius =
+      Math.SQRT2 *
+      Math.max(hm.uWorld.value * hm.uSpan.value, atmo.current ? ATMO_WORLD / 2 : 0, MOTE_REACH)
+    const inView = viewFrustum(state.camera, t).intersectsSphere(cullSphere) && adm > 0.001
+    halo.current.visible = inView
+    if (atmo.current) atmo.current.visible = inView
+    motes.current.visible = inView && moteFar > 0.01 && adm > 0.01
+
     if (atmo.current) {
       const am = (atmo.current.material as THREE.ShaderMaterial).uniforms
       am.uWorld.value = ATMO_WORLD / 2
@@ -571,7 +602,7 @@ export default function Beacon({ node, role }: Props) {
     const xm = (crystal.current.material as THREE.ShaderMaterial).uniforms
     xm.uNucleusGain.value = cm.uniforms.uNucleusGain.value
     xm.uIntensity.value = adm
-    xm.uTime.value = t
+    xm.uTime.value = t * TIME_K
     xm.uExposure.value = worldEvents.grade.exposure
     xm.uHover.value = h
 
@@ -635,6 +666,7 @@ export default function Beacon({ node, role }: Props) {
     <group ref={group} position={node.worldPosition}>
       <mesh
         ref={hit}
+        geometry={HIT_GEO}
         visible={false}
         onPointerOver={(e) => {
           if (!canHoverPointer || !interactive) return
@@ -666,17 +698,13 @@ export default function Beacon({ node, role }: Props) {
           if (e.pointerType === 'touch') navigator.vibrate?.(8)
           travelTo(node.id)
         }}
-      >
-        <sphereGeometry args={[1, 12, 12]} />
-      </mesh>
+      />
 
       {assets && (
         <>
           <mesh ref={crystal} geometry={CRYSTAL_GEO} material={assets.crystalMat} />
 
-          <mesh ref={core} material={assets.coreMat}>
-            <icosahedronGeometry args={[1.45, 3]} />
-          </mesh>
+          <mesh ref={core} geometry={CORE_GEO} material={assets.coreMat} />
 
           <points
             ref={motes}

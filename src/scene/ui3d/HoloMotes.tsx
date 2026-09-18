@@ -3,9 +3,11 @@ import { useFrame } from '@react-three/fiber'
 import * as THREE from 'three'
 import motesVert from '@/shaders/holo/motes.vert'
 import motesFrag from '@/shaders/holo/motes.frag'
+import { useStore } from '@/state/store'
 
 const COUNT = 160
 const COOL = '#bcd9ff'
+const DRIFT_K = useStore.getState().reducedMotion ? 0.3 : 1
 
 interface Props {
   width: number
@@ -71,7 +73,7 @@ export default function HoloMotes({ width, height, accent, fadeRef }: Props) {
     if (points.current) points.current.visible = fade > 0.01
 
     const u = a.mat.uniforms
-    u.uTime.value = state.clock.elapsedTime
+    u.uTime.value = state.clock.elapsedTime * DRIFT_K
     u.uOpacity.value = fade
     ;(u.uSize.value as THREE.Vector2).set(width, height)
     ;(u.uColor.value as THREE.Color).copy(accent)
