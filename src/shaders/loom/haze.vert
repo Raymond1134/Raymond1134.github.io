@@ -5,6 +5,10 @@ uniform float uPkSpeed;
 uniform float uReveal;
 uniform vec3  uRevealOrigin;
 uniform float uRevealFlash;
+uniform vec4  uComet;
+uniform float uCometTail;
+uniform vec4  uRing;
+uniform float uRingGain;
 
 attribute vec3  aDir;
 attribute float aSide;
@@ -77,6 +81,19 @@ void main() {
     reveal = smoothstep(0.0, 14.0, behind) * step(0.001, uReveal);
     float b = max(behind, 0.0);
     vHot = uRevealFlash * (exp(-b / 40.0) + 0.35 * exp(-b / 110.0)) * (1.0 - smoothstep(0.84, 1.0, uReveal));
+  }
+
+  if (uComet.w > 0.001) {
+    float dh = (mix(aAlong, 1.0 - aAlong, uComet.y) - uComet.z) * aLen;
+    float head = exp(-dh * dh * 0.035);
+    float tail = step(dh, 0.0) * exp(min(dh, 0.0) / (uCometTail * 1.3));
+    vHot += step(abs(aEnds.y - uComet.x), 0.5) * uComet.w * (2.6 * head + 1.0 * tail);
+  }
+
+  if (uRingGain > 0.001) {
+    float rd = (distance(p, uRing.xyz) - uRing.w) / 8.5;
+    float od = max(-(modelViewMatrix * vec4(uRing.xyz, 1.0)).z, 20.0);
+    vHot += uRingGain * 1.2 * exp(-rd * rd) * smoothstep(0.6 * od, 1.4 * od, dist);
   }
 
   vEnd = smoothstep(2.5, 9.0, w)

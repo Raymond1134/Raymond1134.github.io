@@ -6,7 +6,8 @@ import beadFrag from '@/shaders/loom/bead.frag'
 import hazeVert from '@/shaders/loom/haze.vert'
 import hazeFrag from '@/shaders/loom/haze.frag'
 import { hash01 } from '@/content/layout'
-import { useStore } from '@/state/store'
+import { useStore, TRAVEL } from '@/state/store'
+import { EASE, flightEase } from '@/motion/tokens'
 import { breath } from './breath'
 import { worldEvents } from './worldEvents'
 import { NO_COMPOSER } from './composerPolicy'
@@ -31,6 +32,25 @@ const NODES = ORDER_IDX.size
 const PARENT_IDX = Int16Array.from(useStore.getState().graph.order, (id) =>
   ORDER_IDX.get(useStore.getState().graph.nodes.get(id)?.parentId ?? '') ?? -1,
 )
+const THREAD_LEN = Float32Array.from(useStore.getState().graph.order, (id) => {
+  const { nodes } = useStore.getState().graph
+  const n = nodes.get(id)
+  const p = n?.parentId ? nodes.get(n.parentId) : undefined
+  return n && p ? n.worldPosition.distanceTo(p.worldPosition) : 0
+})
+
+const COMET_IN = 0.18
+const COMET_FADE = 5
+const TAIL_MIN = 7
+const TAIL_MAX = 32
+const TAIL_PER_SPEED = 0.075
+
+const RING_LIFE = 2.2
+const RING_REACH = 190
+const RING_GAIN = { none: 0, ignite: CALM ? 0 : 0.7, land: CALM ? 0 : 1, picardy: CALM ? 0 : 1.6 } as const
+
+const comet = { idx: -1, rev: 0, head: 0, gain: 0, tail: TAIL_MIN, flying: false }
+const ring = { gain: 0, radius: 0 }
 
 const HANDOFF = 0.75
 const PATH_IN = 0.28
@@ -84,6 +104,45 @@ function stepThreads(dt: number, cur: number, hov: number, snap: boolean) {
   }
 }
 
+function stepComet(dt: number, s: ReturnType<typeof useStore.getState>) {
+  const a = s.phase === 'flight' ? ORDER_IDX.get(s.previousId ?? '') ?? -1 : -1
+  const b = ORDER_IDX.get(s.currentId) ?? -1
+  const fwd = a >= 0 && b >= 0 && PARENT_IDX[b] === a
+  const back = a >= 0 && b >= 0 && PARENT_IDX[a] === b
+  if (!fwd && !back) {
+    comet.flying = false
+    comet.gain *= Math.exp(-dt * COMET_FADE)
+    return
+  }
+  const ft = THREE.MathUtils.clamp((s.travelClock - TRAVEL.turn) / TRAVEL.flight, 0, 1)
+  const e = flightEase(ft)
+  const idx = fwd ? b : a
+  if (!comet.flying || comet.idx !== idx) {
+    comet.idx = idx
+    comet.head = e
+    comet.tail = TAIL_MIN
+    comet.flying = true
+  }
+  const speed = (Math.abs(e - comet.head) / Math.max(dt, 1e-3)) * THREAD_LEN[idx]
+  const tail = THREE.MathUtils.clamp(TAIL_MIN + TAIL_PER_SPEED * speed, TAIL_MIN, TAIL_MAX)
+  comet.tail += (tail - comet.tail) * (1 - Math.exp(-dt * 14))
+  comet.rev = fwd ? 0 : 1
+  comet.head = e
+  comet.gain = EASE.glide(Math.min(1, ft / COMET_IN))
+}
+
+function stepRing(t: number) {
+  const st = worldEvents.strike
+  const age = t - st.at
+  if (age < 0 || age >= RING_LIFE) {
+    ring.gain = 0
+    return
+  }
+  const x = age / RING_LIFE
+  ring.radius = RING_REACH * (1 - (1 - x) * (1 - x))
+  ring.gain = RING_GAIN[st.kind] * Math.pow(1 - x, 1.5) * Math.min(1, age / 0.08)
+}
+
 function drive(m: THREE.Material | THREE.Material[] | undefined, gl: THREE.WebGLRenderer) {
   if (!m || Array.isArray(m)) return
   const u = (m as THREE.ShaderMaterial).uniforms
@@ -92,6 +151,11 @@ function drive(m: THREE.Material | THREE.Material[] | undefined, gl: THREE.WebGL
   if (u.uPixelRatio) u.uPixelRatio.value = gl.getPixelRatio()
   u.uReveal.value = worldEvents.reveal
   ;(u.uRevealOrigin.value as THREE.Vector3).copy(worldEvents.revealOrigin)
+  ;(u.uComet.value as THREE.Vector4).set(comet.idx, comet.rev, comet.head, comet.gain)
+  u.uCometTail.value = comet.tail
+  const o = worldEvents.strike.origin
+  ;(u.uRing.value as THREE.Vector4).set(o.x, o.y, o.z, ring.radius)
+  u.uRingGain.value = ring.gain
   u.uExposure.value = worldEvents.grade.exposure
   gl.getDrawingBufferSize(u.uResolution.value as THREE.Vector2)
 }
@@ -302,6 +366,10 @@ export default function Loom() {
           uReveal: { value: 1 },
           uRevealOrigin: { value: new THREE.Vector3() },
           uRevealFlash: { value: REVEAL_FLASH },
+          uComet: { value: new THREE.Vector4(-10, 0, 0, 0) },
+          uCometTail: { value: TAIL_MIN },
+          uRing: { value: new THREE.Vector4() },
+          uRingGain: { value: 0 },
           uThreadL: { value: LUM.thread },
           uPulseL: { value: LUM.threadPulse },
           uCold: { value: THREAD_HUE },
@@ -332,6 +400,10 @@ export default function Loom() {
           uReveal: { value: 1 },
           uRevealOrigin: { value: new THREE.Vector3() },
           uRevealFlash: { value: REVEAL_FLASH * 1.6 },
+          uComet: { value: new THREE.Vector4(-10, 0, 0, 0) },
+          uCometTail: { value: TAIL_MIN },
+          uRing: { value: new THREE.Vector4() },
+          uRingGain: { value: 0 },
           uHazeL: { value: LUM.threadHaze },
           uPulseL: { value: LUM.threadPulse * 0.3 },
           uCold: { value: HAZE_HUE },
@@ -360,7 +432,10 @@ export default function Loom() {
     frame.breath = breath(t)
     const cur = ORDER_IDX.get(s.currentId) ?? 0
     const hov = s.hoveredId ? ORDER_IDX.get(s.hoveredId) ?? -1 : -1
-    stepThreads(Math.min(dt, 0.1), cur, hov, link.cur < 0)
+    const step = Math.min(dt, 0.1)
+    stepThreads(step, cur, hov, link.cur < 0)
+    stepComet(step, s)
+    stepRing(t)
     drive(points.current?.material, state.gl)
     drive(haze.current?.material, state.gl)
   })

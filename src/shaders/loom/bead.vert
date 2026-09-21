@@ -6,6 +6,10 @@ uniform float uPkSpeed;
 uniform float uReveal;
 uniform vec3  uRevealOrigin;
 uniform float uRevealFlash;
+uniform vec4  uComet;
+uniform float uCometTail;
+uniform vec4  uRing;
+uniform float uRingGain;
 uniform vec2  uResolution;
 
 attribute float aAlong;
@@ -34,13 +38,20 @@ void main() {
   ) * (0.45 * uSway);
 
   float reveal = 1.0;
-  float flash = 0.0;
+  float hot = 0.0;
   if (uReveal < 1.0) {
     float front = uReveal * 380.0;
     float behind = front - distance(p, uRevealOrigin);
     reveal = smoothstep(0.0, 14.0, behind) * step(0.001, uReveal);
     float b = max(behind, 0.0);
-    flash = uRevealFlash * (exp(-b / 30.0) + 0.35 * exp(-b / 100.0)) * (1.0 - smoothstep(0.84, 1.0, uReveal));
+    hot = uRevealFlash * (exp(-b / 30.0) + 0.35 * exp(-b / 100.0)) * (1.0 - smoothstep(0.84, 1.0, uReveal));
+  }
+
+  if (uComet.w > 0.001) {
+    float dh = (mix(aAlong, 1.0 - aAlong, uComet.y) - uComet.z) * aLen;
+    float head = exp(-dh * dh * 0.07);
+    float tail = step(dh, 0.0) * exp(min(dh, 0.0) / uCometTail);
+    hot += step(abs(aEnds.y - uComet.x), 0.5) * uComet.w * (3.0 * head + 1.1 * tail);
   }
 
   vec4 mv = modelViewMatrix * vec4(p, 1.0);
@@ -48,11 +59,17 @@ void main() {
   float dist = max(-mv.z, 0.001);
   vDepth = dist;
 
+  if (uRingGain > 0.001) {
+    float rd = (distance(p, uRing.xyz) - uRing.w) / 6.0;
+    float od = max(-(modelViewMatrix * vec4(uRing.xyz, 1.0)).z, 20.0);
+    hot += uRingGain * 2.0 * exp(-rd * rd) * smoothstep(0.6 * od, 1.4 * od, dist);
+  }
+
   float near = 1.0 - smoothstep(20.0, 180.0, dist);
   float vk = clamp(uResolution.y / (uPixelRatio * 760.0), 0.62, 1.0);
-  float px = min(1.5 * uPixelRatio * (130.0 / dist), (4.5 + 2.5 * near) * uPixelRatio) * vk * (1.0 + 0.45 * flash);
+  float px = min(1.5 * uPixelRatio * (130.0 / dist), (4.5 + 2.5 * near) * uPixelRatio) * vk * (1.0 + 0.45 * min(hot, 3.0));
   float size = max(px, 1.5 * uPixelRatio);
-  gl_PointSize = size;
+  gl_PointSize = reveal > 0.0 ? size : 1.0;
   float tiny = min(1.0, (px * px) / (size * size));
 
   vec4 th = uThread[int(aEnds.y + 0.5)];
@@ -71,7 +88,7 @@ void main() {
   float rev = exp(-r1 * r1 * 0.041) + exp(-r2 * r2 * 0.041) * 0.8;
   vPulse = mix(fwd, rev, smoothstep(0.0, 1.0, th.w))
          * mix(0.75, 1.0, vAdj) * (1.0 + 1.2 * vPath);
-  vHot = flash;
+  vHot = hot;
 
   vTw = 1.0 + 0.5 * uSway * sin(uTime * (1.6 + aSeed * 2.4) + aSeed * 61.8);
 

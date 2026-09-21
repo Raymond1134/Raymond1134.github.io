@@ -6,7 +6,7 @@ import type { GraphNode } from '@/content/layout'
 import { input, attachInput, settleInput, coastInput, haltFling, setLookScale } from '@/input/input'
 import { breath, BREATH_HZ } from '@/scene/breath'
 import { worldEvents } from '@/scene/worldEvents'
-import { EASE, LAMBDA, swellTight } from '@/motion/tokens'
+import { EASE, LAMBDA, swellTight, flightEase } from '@/motion/tokens'
 import { playPicardy, picardyReady } from '@/audio/score'
 import { panelSizeFor, PANEL_Z, PANEL_LIFT } from '@/scene/ui3d/panelLayout'
 
@@ -116,14 +116,6 @@ function applyFov(camera: THREE.PerspectiveCamera, fov: number, height: number, 
   camera.zoom = zoom
   camera.updateProjectionMatrix()
   setLookScale((2 * Math.tan(THREE.MathUtils.degToRad(fov) / 2)) / zoom / Math.max(1, height))
-}
-
-const ACCEL_END = 0.45
-const A_JUNCTION = 0.65
-function flightEase(ft: number) {
-  return ft < ACCEL_END
-    ? A_JUNCTION * Math.pow(ft / ACCEL_END, 2.2)
-    : A_JUNCTION + (1 - A_JUNCTION) * (1 - Math.pow(1 - (ft - ACCEL_END) / (1 - ACCEL_END), 5))
 }
 
 export default function CameraRig() {

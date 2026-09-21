@@ -15,3 +15,10 @@ export const EASE = {
 
 export const swell = (t: number) => Math.sin(Math.PI * t)
 export const swellTight = (t: number) => Math.pow(Math.sin(Math.PI * t), 1.5)
+
+const ACCEL_END = 0.45
+const A_JUNCTION = 0.65
+export const flightEase = (ft: number) =>
+  ft < ACCEL_END
+    ? A_JUNCTION * Math.pow(ft / ACCEL_END, 2.2)
+    : A_JUNCTION + (1 - A_JUNCTION) * (1 - Math.pow(1 - (ft - ACCEL_END) / (1 - ACCEL_END), 5))
