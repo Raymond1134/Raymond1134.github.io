@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import type { CSSProperties } from 'react'
+import type { CSSProperties, FocusEvent, PointerEvent } from 'react'
 import { useStore } from '@/state/store'
 import { site } from '@/content'
 import type { Graph } from '@/content/layout'
@@ -23,17 +23,19 @@ const closeMap = () => {
 
 function WeaveOverlay({ closing, onGone }: { closing: boolean; onGone: () => void }) {
   const compact = useStore((s) => s.compact)
+  const accent = useStore((s) => s.graph.nodes.get(s.currentId)?.color ?? BEACON_DEFAULT_COLOR)
   const panelRef = useRef<HTMLDivElement>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     const el = scrollRef.current
-    const cur = el?.querySelector('.is-current')
+    const cur = el?.querySelector('.is-current .hit')
     if (!el || !cur) return
     const c = cur.getBoundingClientRect()
     const r = el.getBoundingClientRect()
-    el.scrollLeft += c.left + c.width / 2 - (r.left + r.width / 2)
-    el.scrollTop += c.top + c.height / 2 - (r.top + r.height / 2)
+    const k = r.width / el.offsetWidth || 1
+    el.scrollLeft += (c.left + c.width / 2 - (r.left + r.width / 2)) / k
+    el.scrollTop += (c.top + c.height / 2 - (r.top + r.height / 2)) / k
   }, [])
 
   useEffect(() => {
@@ -75,6 +77,7 @@ function WeaveOverlay({ closing, onGone }: { closing: boolean; onGone: () => voi
       aria-modal="true"
       aria-label="The weave"
       data-closing={closing || undefined}
+      style={{ '--weave-accent': accent } as CSSProperties}
       onAnimationEnd={(e) => {
         if (e.animationName === 'weave-out') onGone()
       }}
@@ -106,9 +109,20 @@ const VIEW = { w: 1000, h: 760 }
 
 const MARGIN = { x: 132, y: 76 }
 
+const STEP_MS = 220
+const FAR_HOPS = 6
+
 interface Pt {
   x: number
   y: number
+}
+
+interface Thread {
+  a: Pt
+  b: Pt
+  from: string
+  to: string
+  bow: number
 }
 
 function layout(graph: Graph) {
@@ -136,7 +150,12 @@ function layout(graph: Graph) {
   }
 
   const drawn = new Set<string>()
-  const threads: { a: Pt; b: Pt; from: string; to: string; bow: number }[] = []
+  const threads: Thread[] = []
+  const adj = new Map<string, Set<string>>()
+  const link = (a: string, b: string) => {
+    if (!adj.has(a)) adj.set(a, new Set())
+    adj.get(a)!.add(b)
+  }
 
   const thread = (from: string, to: string, bow: number) => {
     const key = from < to ? `${from}|${to}` : `${to}|${from}`
@@ -145,6 +164,8 @@ function layout(graph: Graph) {
     if (!a || !b || drawn.has(key)) return
     drawn.add(key)
     threads.push({ a, b, from, to, bow })
+    link(from, to)
+    link(to, from)
   }
 
   for (const id of graph.order) {
@@ -153,7 +174,22 @@ function layout(graph: Graph) {
     n?.related.forEach((r) => thread(id, r, 2.2))
   }
 
-  return { pts, threads }
+  return { pts, threads, adj, paths: threads.map((t) => threadPath(t.a, t.b, t.bow)) }
+}
+
+function hopsFrom(adj: Map<string, Set<string>>, start: string) {
+  const hops = new Map<string, number>([[start, 0]])
+  const queue = [start]
+  for (let i = 0; i < queue.length; i++) {
+    const id = queue[i]
+    const h = hops.get(id)! + 1
+    adj.get(id)?.forEach((o) => {
+      if (hops.has(o)) return
+      hops.set(o, h)
+      queue.push(o)
+    })
+  }
+  return hops
 }
 
 function threadPath(a: Pt, b: Pt, k: number): string {
@@ -169,75 +205,171 @@ function threadPath(a: Pt, b: Pt, k: number): string {
 function WeaveGraph() {
   const graph = useStore((s) => s.graph)
   const currentId = useStore((s) => s.currentId)
-  const { pts, threads } = useMemo(() => layout(graph), [graph])
+  const { pts, threads, adj, paths } = useMemo(() => layout(graph), [graph])
+  const hops = useMemo(() => hopsFrom(adj, currentId), [adj, currentId])
+  const [hot, setHot] = useState<string | null>(null)
 
   const colorOf = (id: string) => graph.nodes.get(id)?.color ?? BEACON_DEFAULT_COLOR
+  const hopOf = (id: string) => hops.get(id) ?? FAR_HOPS
+  const litNode = (id: string) => !!hot && (id === hot || !!adj.get(hot)?.has(id))
+  const litThread = (i: number) => !!hot && (threads[i].from === hot || threads[i].to === hot)
+
+  const warm = (id: string) => (e: PointerEvent) => {
+    if (e.pointerType === 'mouse') setHot(id)
+  }
+  const focus = (id: string) => (e: FocusEvent<Element>) => {
+    if (e.currentTarget.matches(':focus-visible')) setHot(id)
+  }
+  const cool = (id: string) => () => setHot((h) => (h === id ? null : h))
+
+  const reach = (i: number) => {
+    const t = threads[i]
+    const near = Math.min(hopOf(t.from), hopOf(t.to))
+    return {
+      '--d': near * STEP_MS,
+      '--from': hopOf(t.from) <= hopOf(t.to) ? 1.02 : -1.02,
+    } as CSSProperties
+  }
 
   return (
-    <svg
-      className="weave-svg"
-      viewBox={`0 0 ${VIEW.w} ${VIEW.h}`}
-      role="group"
-      aria-label="Every beacon, joined by the threads between them"
-    >
-      <defs>
-        <filter id="weave-halo" x="-50%" y="-50%" width="200%" height="200%">
-          <feGaussianBlur stdDeviation="6" />
-        </filter>
-        {threads.map((t, i) => (
-          <linearGradient
-            key={i}
-            id={`weave-thread-${i}`}
-            gradientUnits="userSpaceOnUse"
-            x1={t.a.x}
-            y1={t.a.y}
-            x2={t.b.x}
-            y2={t.b.y}
-          >
-            <stop offset="0%" stopColor={colorOf(t.from)} />
-            <stop offset="100%" stopColor={colorOf(t.to)} />
-          </linearGradient>
-        ))}
-      </defs>
-
-      {threads.map((t, i) => {
-        const d = threadPath(t.a, t.b, t.bow)
-        const faint = t.bow > 1
-        return (
-          <g key={i} stroke={`url(#weave-thread-${i})`} fill="none" strokeLinecap="round">
-            <path d={d} strokeWidth={4} opacity={faint ? 0.18 : 0.34} filter="url(#weave-halo)" />
-            <path d={d} strokeWidth={1.1} opacity={faint ? 0.16 : 0.34} />
-          </g>
-        )
-      })}
-
-      {[...pts].map(([id, p]) => {
-        const node = graph.nodes.get(id)
-        if (!node) return null
-        const isCurrent = id === currentId
-        return (
-          <g
-            key={id}
-            transform={`translate(${p.x} ${p.y})`}
-            style={{ '--node-accent': colorOf(id) } as CSSProperties}
-          >
-            <a
-              className={`weave-node${isCurrent ? ' is-current' : ''}`}
-              href={hrefFor(id)}
-              aria-current={isCurrent ? 'page' : undefined}
-              aria-label={isCurrent ? `${node.title}, you are here` : `Travel to ${node.title}`}
-              onClick={() => isCurrent && closeMap()}
+    <div className="weave-stage">
+      <svg
+        className="weave-svg weave-glow-svg"
+        viewBox={`0 0 ${VIEW.w} ${VIEW.h}`}
+        aria-hidden
+        data-hot={hot ?? undefined}
+      >
+        <defs>
+          <filter id="weave-halo" x="-10%" y="-10%" width="120%" height="120%">
+            <feGaussianBlur stdDeviation="6" />
+          </filter>
+          {threads.map((t, i) => (
+            <linearGradient
+              key={i}
+              id={`weave-glow-thread-${i}`}
+              gradientUnits="userSpaceOnUse"
+              x1={t.a.x}
+              y1={t.a.y}
+              x2={t.b.x}
+              y2={t.b.y}
             >
-              <circle className="halo" r={18} filter="url(#weave-halo)" />
-              <circle className="core" r={isCurrent ? 7 : 5} />
-              <text className="label" y={36}>
-                {node.title}
-              </text>
-              <circle className="hit" r={22} />
-            </a>
-          </g>
-        )
-      })}
-    </svg>
+              <stop offset="0%" stopColor={colorOf(t.from)} />
+              <stop offset="100%" stopColor={colorOf(t.to)} />
+            </linearGradient>
+          ))}
+        </defs>
+        <g filter="url(#weave-halo)" fill="none" strokeLinecap="round">
+          {threads.map((t, i) => (
+            <path
+              key={i}
+              className="weave-glow"
+              d={paths[i]}
+              stroke={`url(#weave-glow-thread-${i})`}
+              strokeWidth={4}
+              opacity={t.bow > 1 ? 0.18 : 0.34}
+              data-lit={litThread(i) || undefined}
+              style={reach(i)}
+            />
+          ))}
+        </g>
+      </svg>
+
+      <svg
+        className="weave-svg weave-main-svg"
+        viewBox={`0 0 ${VIEW.w} ${VIEW.h}`}
+        role="group"
+        aria-label="Every beacon, joined by the threads between them"
+        data-hot={hot ?? undefined}
+      >
+        <defs>
+          {threads.map((t, i) => (
+            <linearGradient
+              key={i}
+              id={`weave-thread-${i}`}
+              gradientUnits="userSpaceOnUse"
+              x1={t.a.x}
+              y1={t.a.y}
+              x2={t.b.x}
+              y2={t.b.y}
+            >
+              <stop offset="0%" stopColor={colorOf(t.from)} />
+              <stop offset="100%" stopColor={colorOf(t.to)} />
+            </linearGradient>
+          ))}
+          {[...pts.keys()].map((id) => (
+            <radialGradient key={id} id={`weave-glow-${id}`}>
+              <stop offset="0%" stopColor={colorOf(id)} stopOpacity={0.95} />
+              <stop offset="34%" stopColor={colorOf(id)} stopOpacity={0.5} />
+              <stop offset="100%" stopColor={colorOf(id)} stopOpacity={0} />
+            </radialGradient>
+          ))}
+        </defs>
+
+        {threads.map((t, i) => {
+          const faint = t.bow > 1
+          const mine = t.from === currentId || t.to === currentId
+          return (
+            <g
+              key={i}
+              className="weave-thread"
+              stroke={`url(#weave-thread-${i})`}
+              fill="none"
+              strokeLinecap="round"
+              data-lit={litThread(i) || undefined}
+              style={reach(i)}
+            >
+              <path className="weave-line" d={paths[i]} pathLength={1} strokeWidth={1.1} opacity={faint ? 0.16 : 0.34} />
+              {mine && (
+                <>
+                  <path className="weave-flow" d={paths[i]} pathLength={1} data-rev={t.to === currentId || undefined} />
+                  <path
+                    className="weave-flow weave-flow-b"
+                    d={paths[i]}
+                    pathLength={1}
+                    data-rev={t.to === currentId || undefined}
+                  />
+                </>
+              )}
+            </g>
+          )
+        })}
+
+        {[...pts].map(([id, p]) => {
+          const node = graph.nodes.get(id)
+          if (!node) return null
+          const isCurrent = id === currentId
+          return (
+            <g
+              key={id}
+              className="weave-star"
+              transform={`translate(${p.x} ${p.y})`}
+              data-lit={litNode(id) || undefined}
+              style={{ '--node-accent': colorOf(id), '--d': hopOf(id) * STEP_MS } as CSSProperties}
+            >
+              <a
+                className={`weave-node${isCurrent ? ' is-current' : ''}`}
+                href={hrefFor(id)}
+                aria-current={isCurrent ? 'page' : undefined}
+                aria-label={isCurrent ? `${node.title}, you are here` : `Travel to ${node.title}`}
+                onClick={() => isCurrent && closeMap()}
+                onPointerEnter={warm(id)}
+                onPointerLeave={cool(id)}
+                onFocus={focus(id)}
+                onBlur={cool(id)}
+              >
+                {isCurrent && <circle className="ripple" r={9} />}
+                {isCurrent && <circle className="ripple ripple-b" r={9} />}
+                <circle className="halo" r={22} fill={`url(#weave-glow-${id})`} />
+                <circle className="core" r={isCurrent ? 7 : 5} />
+                <text className="label" y={36}>
+                  {node.title}
+                </text>
+                <circle className="hit" r={22} />
+              </a>
+            </g>
+          )
+        })}
+      </svg>
+    </div>
   )
 }

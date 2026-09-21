@@ -7,7 +7,11 @@
 .weave-backdrop {
   position: absolute;
   inset: 0;
-  background: rgba(3, 5, 14, 0.92);
+  background:
+    radial-gradient(58% 48% at 50% 46%, color-mix(in srgb, var(--weave-accent, #ffd9a0) 12%, transparent), transparent 72%),
+    radial-gradient(70% 55% at 88% 108%, rgba(45, 111, 216, 0.12), transparent 70%),
+    radial-gradient(60% 50% at 6% -8%, rgba(138, 92, 230, 0.1), transparent 70%),
+    rgba(3, 5, 14, 0.92);
   backdrop-filter: blur(18px);
   -webkit-backdrop-filter: blur(18px);
   animation: weave-veil 300ms ease both;
@@ -21,7 +25,7 @@
   display: flex;
   flex-direction: column;
   padding: calc(var(--sat) + 12px) max(14px, var(--sar)) calc(var(--sab) + 12px) max(14px, var(--sal));
-  animation: weave-in 420ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation: weave-in 520ms cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 .weave-panel:focus { outline: none; }
 
@@ -38,6 +42,7 @@
   font-weight: 600;
   letter-spacing: 0.04em;
   color: #9db8dc;
+  text-shadow: 0 0 18px color-mix(in srgb, var(--weave-accent, #ffd9a0) 30%, transparent);
 }
 
 .weave-close {
@@ -55,8 +60,16 @@
   font: inherit;
   font-size: 15px;
   cursor: pointer;
+  transition: border-color 220ms ease, box-shadow 220ms ease, background 220ms ease;
 }
 .weave-close:active { background: rgba(207, 224, 247, 0.14); }
+
+@media (hover: hover) {
+  .weave-close:hover {
+    border-color: color-mix(in srgb, var(--weave-accent, #ffd9a0) 50%, transparent);
+    box-shadow: 0 0 18px color-mix(in srgb, var(--weave-accent, #ffd9a0) 25%, transparent);
+  }
+}
 
 .weave-hint {
   flex: 0 0 auto;
@@ -67,11 +80,24 @@
   color: #6f88ad;
 }
 
-.weave-svg {
+.weave-stage {
+  position: relative;
   flex: 1 1 auto;
   min-height: 0;
   width: 100%;
+}
+
+.weave-svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
   overflow: visible;
+}
+
+.weave-glow-svg {
+  pointer-events: none;
+  will-change: transform;
 }
 
 .weave-scroll {
@@ -83,27 +109,57 @@
   -webkit-overflow-scrolling: touch;
   container-type: size;
 }
-.weave-scroll .weave-svg {
+.weave-scroll .weave-stage {
   flex: none;
   margin: auto;
-  width: max(720px, min(100cqw, 131.5cqh));
+  width: max(800px, min(100cqw, 131.5cqh));
   height: auto;
   aspect-ratio: 1000 / 760;
 }
+
+.weave-glow,
+.weave-thread,
+.weave-star { transition: opacity 260ms ease; }
+
+.weave-glow {
+  animation: weave-fade 820ms ease calc(var(--d, 0) * 1ms + 260ms) backwards;
+}
+
+.weave-line {
+  stroke-dasharray: 1 2;
+  animation: weave-draw 460ms cubic-bezier(0.22, 1, 0.36, 1) calc(var(--d, 0) * 1ms + 30ms) backwards;
+  transition: stroke-width 260ms ease;
+}
+
+.weave-flow {
+  stroke: #fff4e0;
+  stroke-width: 3;
+  stroke-dasharray: 0.014 0.986;
+  opacity: 0.9;
+  pointer-events: none;
+  animation:
+    weave-flow 3.4s linear infinite,
+    weave-fade 700ms ease 760ms backwards;
+}
+.weave-flow[data-rev] { animation-direction: reverse, normal; }
+.weave-flow-b { animation-delay: -1.7s, 760ms; }
 
 .weave-node { cursor: pointer; text-decoration: none; }
 .weave-node:focus { outline: none; }
 
 .weave-node .halo {
-  fill: var(--node-accent);
-  opacity: 0.32;
+  opacity: 0.62;
   transform-box: fill-box;
   transform-origin: center;
   transition: opacity 260ms ease;
+  animation: weave-halo-in 760ms cubic-bezier(0.22, 1, 0.36, 1) calc(var(--d, 0) * 1ms + 60ms) backwards;
 }
 .weave-node .core {
   fill: var(--node-accent);
-  transition: r 260ms ease;
+  transform-box: fill-box;
+  transform-origin: center;
+  transition: scale 280ms cubic-bezier(0.34, 1.56, 0.64, 1);
+  animation: weave-pop 560ms cubic-bezier(0.34, 1.56, 0.64, 1) calc(var(--d, 0) * 1ms) backwards;
 }
 .weave-node .hit { fill: transparent; stroke: none; }
 
@@ -117,27 +173,82 @@
   stroke-width: 4px;
   stroke-linejoin: round;
   transition: fill 260ms ease;
+  animation: weave-rise 540ms cubic-bezier(0.22, 1, 0.36, 1) calc(var(--d, 0) * 1ms + 160ms) backwards;
 }
+
+.weave-node .ripple {
+  fill: none;
+  stroke: var(--node-accent);
+  stroke-width: 1.4;
+  vector-effect: non-scaling-stroke;
+  transform-box: fill-box;
+  transform-origin: center;
+  opacity: 0;
+  pointer-events: none;
+  animation: weave-ripple 3.2s cubic-bezier(0.22, 1, 0.36, 1) 420ms infinite;
+}
+.weave-node .ripple-b { animation-delay: 2020ms; }
+
+.weave-svg[data-hot] .weave-thread:not([data-lit]),
+.weave-svg[data-hot] .weave-star:not([data-lit]) { opacity: 0.22; }
+.weave-svg[data-hot] .weave-glow:not([data-lit]) { opacity: 0.04; }
+.weave-svg[data-hot] .weave-thread[data-lit] .weave-line { stroke-width: 1.8; }
+.weave-svg[data-hot] .weave-star[data-lit] .label { fill: #eef6ff; }
 
 @media (hover: hover) {
-  .weave-node:hover .halo { opacity: 0.6; }
+  .weave-node:hover .halo { opacity: 0.95; }
   .weave-node:hover .label { fill: #eef6ff; }
+  .weave-node:hover .core { scale: 1.4; }
 }
+a.weave-node:focus-visible .core { scale: 1.4; }
 
 .weave-node.is-current .halo {
-  animation: weave-breathe 4.2s ease-in-out infinite;
+  animation:
+    weave-halo-in 760ms cubic-bezier(0.22, 1, 0.36, 1) 60ms backwards,
+    weave-breathe 4.2s ease-in-out 820ms infinite;
 }
 .weave-node.is-current .label {
   fill: #eef6ff;
+  font-weight: 600;
+}
+
+@keyframes weave-draw {
+  from { stroke-dashoffset: var(--from, 1.02); }
+}
+
+@keyframes weave-fade {
+  from { opacity: 0; }
+}
+
+@keyframes weave-flow {
+  from { stroke-dashoffset: 1; }
+  to { stroke-dashoffset: 0; }
+}
+
+@keyframes weave-pop {
+  from { transform: scale(0); }
+}
+
+@keyframes weave-halo-in {
+  from { opacity: 0; transform: scale(0.3); }
+}
+
+@keyframes weave-rise {
+  from { opacity: 0; transform: translateY(6px); }
+}
+
+@keyframes weave-ripple {
+  0% { transform: scale(1); opacity: 0.8; }
+  100% { transform: scale(3.8); opacity: 0; }
 }
 
 @keyframes weave-breathe {
-  0%, 100% { transform: scale(1); opacity: 0.34; }
-  50% { transform: scale(1.5); opacity: 0.62; }
+  0%, 100% { transform: scale(1); opacity: 0.66; }
+  50% { transform: scale(1.5); opacity: 0.95; }
 }
 
 @keyframes weave-in {
-  from { opacity: 0; transform: scale(0.97); }
+  from { opacity: 0; transform: scale(1.07); }
   to { opacity: 1; transform: none; }
 }
 
@@ -148,7 +259,10 @@
 
 @media (pointer: coarse) and (max-width: 600px), (pointer: coarse) and (max-height: 600px) {
   .weave-backdrop {
-    background: rgba(3, 5, 14, 0.95);
+    background:
+      radial-gradient(70% 45% at 50% 46%, color-mix(in srgb, var(--weave-accent, #ffd9a0) 12%, transparent), transparent 72%),
+      radial-gradient(80% 50% at 90% 104%, rgba(45, 111, 216, 0.12), transparent 70%),
+      rgba(3, 5, 14, 0.95);
     backdrop-filter: none;
     -webkit-backdrop-filter: none;
   }
@@ -167,15 +281,32 @@
 @media (prefers-reduced-motion: reduce) {
   .weave-panel,
   .weave-backdrop,
+  .weave-glow,
+  .weave-line,
+  .weave-node .halo,
+  .weave-node .core,
+  .weave-node .label,
   .weave-node.is-current .halo { animation: none; }
+  .weave-glow,
+  .weave-thread,
+  .weave-star,
+  .weave-line,
+  .weave-close,
   .weave-node .halo,
   .weave-node .core,
   .weave-node .label { transition: none; }
+  .weave-flow,
+  .weave-node .ripple { display: none; }
 }
 
 
 .weave[data-closing] { pointer-events: none; }
 .weave[data-closing] .weave-backdrop { animation: weave-veil-out 260ms ease both; }
 .weave[data-closing] .weave-panel { animation: weave-out 260ms cubic-bezier(0.22, 1, 0.36, 1) both; }
-@keyframes weave-out { to { opacity: 0; transform: translateY(8px); } }
+@keyframes weave-out { to { opacity: 0; transform: scale(1.03); } }
 @keyframes weave-veil-out { to { opacity: 0; } }
+
+@media (prefers-reduced-motion: reduce) {
+  .weave[data-closing] .weave-backdrop,
+  .weave[data-closing] .weave-panel { animation-duration: 1ms; }
+}
