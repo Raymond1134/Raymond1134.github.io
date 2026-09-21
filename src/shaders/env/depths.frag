@@ -19,6 +19,7 @@ uniform float uEnvSourcedClamp;
 uniform float uExposure;
 uniform vec3  uAuroraDir;
 uniform float uAuroraGain;
+uniform vec2  uAuroraFrame;
 uniform vec2  uResolution;
 uniform vec3  uLightDir[DEPTHS_LIGHTS];
 uniform vec3  uLightCol[DEPTHS_LIGHTS];
@@ -28,6 +29,13 @@ uniform float uBendAmp;
 uniform float uBendT;
 
 varying vec3 vDir;
+
+const vec3 AURORA_HEM = vec3(0.30, 1.20, 0.95);
+#if PHONE_GRADE
+const float AURORA_K = 0.075;
+#else
+const float AURORA_K = 0.115;
+#endif
 
 #if DEPTHS_BEND
 vec3 skyOffset(vec3 d, float t) {
@@ -104,6 +112,37 @@ void main() {
   col *= (0.92 + 0.08 * uBreath) * uDomeGain;
 
   col = softClamp(col, uEnvAmbientClamp);
+
+  if (uAuroraGain > 0.001) {
+    vec2 az = normalize(uAuroraDir.xz + vec2(1e-4));
+    float x = d.x * az.y - d.z * az.x;
+    float at = uBendT;
+#if DEPTHS_OCT > 0
+    float wav = snoise(vec3(x * 3.6, 1.7, at * 0.05));
+    float kink = snoise(vec3(x * 19.0, 5.3, at * 0.08));
+#else
+    float wav = 0.6 * sin(x * 7.3 + at * 0.11) + 0.3 * sin(x * 15.7 - at * 0.07);
+    float kink = 0.6 * sin(x * 23.0 - at * 0.13) + 0.4 * sin(x * 37.0 + at * 0.09);
+#endif
+    float rise = d.y - (uAuroraFrame.x + 0.06 * wav + 0.035 * sin(x * 8.3 + at * 0.13));
+    float up = max(rise, 0.0);
+    float drop = up * uAuroraFrame.y;
+    float r1 = 0.5 + 0.5 * sin(x * 130.0 + wav * 9.0 + kink * 2.4 + up * 8.0 + at * 0.3);
+    float r2 = 0.5 + 0.5 * sin(x * 83.0 - wav * 7.0 + kink * 3.3 + up * 5.0 - at * 0.21);
+    float rays = max(r1 * r1 * r1, 0.8 * r2 * r2 * r2 * r2)
+               * (0.35 + 0.65 * smoothstep(-0.2, 0.9, sin(x * 37.0 + wav * 5.0 - at * 0.12)));
+    float flick = 0.55 + 0.45 * sin(x * 311.0 + wav * 13.0 + kink * 4.0 - at * 0.7);
+    float fold = 0.3 + 0.7 * smoothstep(-0.4, 0.9, sin(x * 7.0 + wav * 3.0 + at * 0.06));
+    float body = exp(-drop * 6.5) * (0.06 + 0.94 * rays * flick);
+    float lip = exp(-up * 30.0) * (0.45 + 0.55 * rays);
+    float lobe = pow(max(dot(d, uAuroraDir), 0.0), 3.0);
+    vec3 lw = vec3(0.2126, 0.7152, 0.0722);
+    vec3 hue = mix(AURORA_HEM, uVeilCold / dot(uVeilCold, lw), smoothstep(0.03, 0.16, drop));
+    hue = mix(hue, uVeilMid / dot(uVeilMid, lw), smoothstep(0.14, 0.34, drop));
+    hue *= mix(vec3(1.0), gelSheen(x * 2.3 + at * 0.04), 0.35);
+    col += (hue * body + AURORA_HEM * (1.2 * lip))
+         * (AURORA_K * uAuroraGain * uDomeGain * lobe * fold * smoothstep(-0.02, 0.01, rise));
+  }
 
   for (int i = 0; i < DEPTHS_LIGHTS; i++) {
     vec3 stain = uLightCol[i] * uLightW[i];

@@ -21,6 +21,10 @@ const ORACLE = toLum('#ffd9a8', 1)
 const RIM = toLum('#ffc98a', 1)
 const ABYSS = toLum('#49e0cf', 1)
 
+const RIPPLE_LIFE = 2.8
+const RIPPLE_REACH = 1150
+const RIPPLE_GAIN = NO_COMPOSER ? 0.9 : 1
+
 export default function GreatVault() {
   const mesh = useRef<THREE.Mesh>(null!)
   const quality = useStore((s) => s.quality)
@@ -68,6 +72,9 @@ export default function GreatVault() {
           uAbyssL: { value: LUM.abyssGlow },
           uExposure: { value: 1 },
           uResolution: { value: new THREE.Vector2(1, 1) },
+          uRipple: { value: new THREE.Vector3() },
+          uRippleGain: { value: 0 },
+          uPixelUp: { value: new THREE.Vector3() },
         },
         transparent: false,
         depthTest: false,
@@ -98,6 +105,22 @@ export default function GreatVault() {
     u.uVaultGain.value = worldEvents.grade.vault * worldEvents.domeGain
     u.uExposure.value = worldEvents.grade.exposure
     state.gl.getDrawingBufferSize(u.uResolution.value as THREE.Vector2)
+
+    const st = worldEvents.strike
+    const age = t - st.at
+    let rg = 0
+    if (st.kind !== 'none' && age >= 0 && age < RIPPLE_LIFE && !useStore.getState().reducedMotion) {
+      const radius = RIPPLE_REACH * (1 - Math.exp(-age))
+      ;(u.uRipple.value as THREE.Vector3).set(st.origin.x, st.origin.z, radius)
+      const e = cam.matrixWorld.elements
+      const fov = THREE.MathUtils.degToRad((cam as THREE.PerspectiveCamera).fov)
+      const pa = (2 * Math.tan(fov / 2)) / state.size.height
+      ;(u.uPixelUp.value as THREE.Vector3).set(e[4], e[5], e[6]).multiplyScalar(pa)
+      rg =
+        Math.pow(1 - age / RIPPLE_LIFE, 1.4) * Math.min(1, age * 8) *
+        (0.6 + 0.4 * Math.min(st.mag, 1.7)) * RIPPLE_GAIN * worldEvents.domeGain
+    }
+    u.uRippleGain.value = rg
   })
 
   return (

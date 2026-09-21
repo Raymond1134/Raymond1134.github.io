@@ -24,12 +24,20 @@ uniform vec3  uAbyssCol;
 uniform float uAbyssL;
 uniform float uExposure;
 uniform vec2  uResolution;
+uniform vec3  uRipple;
+uniform float uRippleGain;
+uniform vec3  uPixelUp;
 
 varying vec3 vDir;
 varying vec3 vRo;
 
 const float COAST_NEAR = 120.0;
 const float COAST_FAR = 1500.0;
+#if PHONE_GRADE
+const float RING_PX = 14.0;
+#else
+const float RING_PX = 11.0;
+#endif
 
 void main() {
   vec3 ro = vRo;
@@ -53,6 +61,7 @@ void main() {
 
   vec3 col = emis * aerialGain(t);
   float a = 0.0;
+  vec3 wave = vec3(0.0);
 
   if (rd.y < -max((ro.y - FLOOR_TOP) / COAST_FAR, 0.02)) {
     float tf = (FLOOR_Y - ro.y) / rd.y;
@@ -125,15 +134,29 @@ void main() {
         float inE = 260.0 + 130.0 * coast2;
         float outE = 750.0 + 260.0 * coast;
         float wisp = 0.5 + 0.5 * snoise(vec3(pf.xz * 0.0045 + vec2(uTime * 0.012, 0.0), 6.6));
-        a = smoothstep(inE, inE + 320.0, tf) * (1.0 - smoothstep(outE, outE + 480.0, tf))
-          * (1.0 - smoothstep(t - 50.0, t, tf))
-          * (0.24 + 0.30 * mistN + 0.16 * wisp);
+        float cover = smoothstep(inE, inE + 320.0, tf) * (1.0 - smoothstep(outE, outE + 480.0, tf))
+                    * (1.0 - smoothstep(t - 50.0, t, tf));
+        a = cover * (0.24 + 0.30 * mistN + 0.16 * wisp);
         col = floorCol * a;
+
+        if (uRippleGain > 0.001) {
+          vec2 rv = pf.xz - uRipple.xy;
+          float rad = length(rv);
+          vec3 dp = tf * (uPixelUp - rd * (uPixelUp.y / rd.y));
+          float w = RING_PX * (abs(dot(rv, dp.xz)) / max(rad, 1.0) + 0.05);
+          float rw = (rad - uRipple.z) / w;
+          float rw2 = (rad - uRipple.z * 0.7) / w;
+          float crest = exp(-rw * rw) + 0.4 * exp(-rw2 * rw2 * 1.4)
+                      + 0.12 * exp(min(rw, 0.0) * (RING_PX / 28.0)) * smoothstep(0.5, -1.0, rw);
+          float face = 0.55 + 0.45 * max(dot(nf, normalize(vec3(-rv.x, rad * 0.35 + 1.0, -rv.y))), 0.0);
+          float reach = mix(0.55, 1.0, exp(-tf * 0.0011)) * cover * (1.0 - smoothstep(25.0, 50.0, w));
+          wave = uAbyssCol * (uAbyssL * uRippleGain * crest * face * (0.5 + 0.5 * mistN) * reach);
+        }
       }
     }
   }
 
-  col *= uVaultGain;
+  col = col * uVaultGain + wave;
 
 #if PHONE_GRADE
   col = aetherGrade(col, uExposure, PHONE_HOLD);

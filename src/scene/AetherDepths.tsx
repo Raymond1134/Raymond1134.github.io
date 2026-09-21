@@ -45,8 +45,13 @@ const LIGHTS: Aureole[] = [...useStore.getState().graph.nodes.values()].map((n) 
   own: 1,
 }))
 
+const fwd = new THREE.Vector3()
+const auroraDir = new THREE.Vector3(0, 1, 0)
+const auroraFrame = new THREE.Vector2(0.15, 1)
+
 export default function AetherDepths() {
   const mesh = useRef<THREE.Mesh>(null!)
+  const auroraLive = useRef(false)
   const quality = useStore((s) => s.quality)
   const compact = useStore((s) => s.compact)
   const tier = useMemo(() => (compact ? { ...TIER[quality], bend: 0 } : TIER[quality]), [quality, compact])
@@ -92,6 +97,7 @@ export default function AetherDepths() {
         uExposure: { value: 1 },
         uAuroraDir: { value: new THREE.Vector3(0, 1, 0) },
         uAuroraGain: { value: 0 },
+        uAuroraFrame: { value: new THREE.Vector2(0.15, 1) },
         uBendAmp: { value: tier.bend },
         uBendT: { value: 40 },
         uResolution: { value: new THREE.Vector2(1, 1) },
@@ -121,8 +127,24 @@ export default function AetherDepths() {
     u.uBreath.value = breath(t)
     u.uDomeGain.value = worldEvents.domeGain
     u.uExposure.value = worldEvents.grade.exposure
-    ;(u.uAuroraDir.value as THREE.Vector3).copy(worldEvents.aurora.dir)
-    u.uAuroraGain.value = worldEvents.aurora.gain
+    const ag = worldEvents.aurora.gain
+    if (ag > 0 && !auroraLive.current) {
+      auroraLive.current = true
+      const ev = worldEvents.aurora.dir
+      cam.getWorldDirection(fwd)
+      const aspect = state.size.width / Math.max(state.size.height, 1)
+      const narrow = 1 - THREE.MathUtils.smoothstep(aspect, 0.6, 1.1)
+      const lip = Math.asin(THREE.MathUtils.clamp(fwd.y, -1, 1)) + 0.15 + 0.13 * narrow
+      const yaw = Math.atan2(fwd.x, fwd.z) + 0.55 * ev.x
+      const el = lip + 0.3 + 0.1 * ev.y
+      auroraDir.set(Math.sin(yaw) * Math.cos(el), Math.sin(el), Math.cos(yaw) * Math.cos(el))
+      auroraFrame.set(Math.sin(lip), 1 + 0.8 * narrow)
+    } else if (ag <= 0) {
+      auroraLive.current = false
+    }
+    ;(u.uAuroraDir.value as THREE.Vector3).copy(auroraDir)
+    ;(u.uAuroraFrame.value as THREE.Vector2).copy(auroraFrame)
+    u.uAuroraGain.value = ag
     u.uBendAmp.value = tier.bend * (1 + 0.9 * worldEvents.grade.caustic)
     if (!CALM) u.uBendT.value = t
     state.gl.getDrawingBufferSize(u.uResolution.value as THREE.Vector2)
