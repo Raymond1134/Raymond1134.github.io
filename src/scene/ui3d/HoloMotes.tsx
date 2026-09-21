@@ -4,10 +4,14 @@ import * as THREE from 'three'
 import motesVert from '@/shaders/holo/motes.vert'
 import motesFrag from '@/shaders/holo/motes.frag'
 import { useStore } from '@/state/store'
+import { EASE } from '@/motion/tokens'
 
 const COUNT = 160
 const COOL = '#bcd9ff'
-const DRIFT_K = useStore.getState().reducedMotion ? 0.3 : 1
+const CALM = useStore.getState().reducedMotion
+const DRIFT_K = CALM ? 0.3 : 1
+const GATHER_TIME = 1.1
+const SCATTER_BELOW = 0.55
 
 interface Props {
   width: number
@@ -35,6 +39,7 @@ function buildAssets(): MoteAssets {
     uniforms: {
       uTime: { value: 0 },
       uOpacity: { value: 0 },
+      uGather: { value: 1 },
       uSize: { value: new THREE.Vector2(30, 17) },
       uPixelRatio: { value: Math.min(window.devicePixelRatio, 2) },
       uColor: { value: new THREE.Color('#ffffff') },
@@ -52,6 +57,7 @@ function buildAssets(): MoteAssets {
 export default function HoloMotes({ width, height, accent, fadeRef }: Props) {
   const points = useRef<THREE.Points>(null)
   const assetsRef = useRef<MoteAssets | null>(null)
+  const gatherT = useRef(0)
   const [assets, setAssets] = useState<MoteAssets | null>(null)
 
   useEffect(() => {
@@ -65,16 +71,20 @@ export default function HoloMotes({ width, height, accent, fadeRef }: Props) {
     }
   }, [])
 
-  useFrame((state) => {
+  useFrame((state, dt) => {
     const a = assetsRef.current
     if (!a) return
 
     const fade = fadeRef.current
     if (points.current) points.current.visible = fade > 0.01
+    gatherT.current = fade < 0.01 ? 0 : Math.min(1, gatherT.current + dt / GATHER_TIME)
 
     const u = a.mat.uniforms
     u.uTime.value = state.clock.elapsedTime * DRIFT_K
     u.uOpacity.value = fade
+    u.uGather.value = CALM
+      ? 1
+      : Math.min(EASE.hearth(gatherT.current), THREE.MathUtils.smoothstep(fade, 0, SCATTER_BELOW))
     ;(u.uSize.value as THREE.Vector2).set(width, height)
     ;(u.uColor.value as THREE.Color).copy(accent)
     u.uPixelRatio.value = state.gl.getPixelRatio()

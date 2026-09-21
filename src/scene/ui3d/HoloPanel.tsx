@@ -7,11 +7,11 @@ import panelVert from '@/shaders/holo/panel.vert'
 import panelFrag from '@/shaders/holo/panel.frag'
 import smokeFrag from '@/shaders/holo/smoke.frag'
 import { useStore, FADE } from '@/state/store'
-import { lookOffset } from '@/input/input'
+import { input, lookOffset } from '@/input/input'
 import { breath } from '@/scene/breath'
 import { worldEvents } from '@/scene/worldEvents'
 import { NO_COMPOSER } from '@/scene/composerPolicy'
-import { LAMBDA } from '@/motion/tokens'
+import { LAMBDA, EASE } from '@/motion/tokens'
 import { BEACON_DEFAULT_COLOR } from '@/scene/beacons/palette'
 import MediaTile from './MediaTile'
 import HoloMotes from './HoloMotes'
@@ -31,12 +31,26 @@ const GLOW_PAD_H = 14
 
 const HOVER_DIM = 0.55
 
-const MIST_K = useStore.getState().reducedMotion ? 0.3 : 1
+const CALM = useStore.getState().reducedMotion
+const MIST_K = CALM ? 0.3 : 1
+
+const DRAW_TIME = 0.85
+const UNFOLD_FROM = CALM ? 1 : 0.955
+const TILT_POINTER_X = 0.05
+const TILT_POINTER_Y = 0.075
+const TILT_GYRO = 0.25
+
+const TITLE_Z = 0.5
+const SUB_Z = 0.4
+const HTML_Z = 0.25
 
 const proj = new THREE.Vector3()
 
 const STAGGER = { plate: 0, title: 0.18, subtitle: 0.3, motes: 0.38, body: 0.5, media: 0.6 } as const
 const WINDOW = 0.42
+
+const reveal = (fade: number, offset: number) =>
+  THREE.MathUtils.smoothstep(fade, offset, offset + WINDOW)
 
 interface TroikaText {
   fillOpacity: number
@@ -60,6 +74,12 @@ export default function HoloPanel() {
   const [htmlLive, setHtmlLive] = useState(false)
 
   const groupRef = useRef<THREE.Group>(null)
+  const innerRef = useRef<THREE.Group>(null)
+  const drawT = useRef(0)
+  const tilt = useRef({ x: 0, y: 0 })
+  const htmlEl = useRef<HTMLDivElement | null>(null)
+  const htmlOpacity = useRef(-1)
+  const htmlOn = useRef<boolean | null>(null)
   const titleRef = useRef<THREE.Mesh>(null)
   const subRef = useRef<THREE.Mesh>(null)
   const htmlRef = useRef<HTMLDivElement>(null)
@@ -79,6 +99,7 @@ export default function HoloPanel() {
         uOpacity: { value: 0 },
         uSize: { value: new THREE.Vector2(30, 17) },
         uExposure: { value: 1 },
+        uDraw: { value: CALM ? 1 : 0 },
       },
       transparent: true,
       depthWrite: false,
@@ -142,9 +163,8 @@ export default function HoloPanel() {
     fadeRef.current = fade
     worldEvents.panelDim = fade
 
-    const ef = (offset: number) => THREE.MathUtils.smoothstep(fade, offset, offset + WINDOW)
-    moteFade.current = ef(STAGGER.motes)
-    mediaFade.current = ef(STAGGER.media)
+    moteFade.current = reveal(fade, STAGGER.motes)
+    mediaFade.current = reveal(fade, STAGGER.media)
 
     const shouldLive = fade > 0.004 || target > 0
     if (shouldLive !== live) setLive(shouldLive)
@@ -154,8 +174,34 @@ export default function HoloPanel() {
     const g = groupRef.current
     if (g) g.quaternion.copy(state.camera.quaternion)
 
+    drawT.current = fade < 0.01 ? 0 : Math.min(1, drawT.current + dt / DRAW_TIME)
+
+    const inner = innerRef.current
+    if (inner) {
+      const open = Math.min(EASE.hearth(drawT.current), EASE.hearth(Math.min(1, fade)))
+      const unfold = UNFOLD_FROM + (1 - UNFOLD_FROM) * open
+      inner.scale.setScalar(unfold)
+      inner.position.set(0, PANEL_H * PANEL_LIFT * unfold, PANEL_Z)
+      let tx = 0
+      let ty = 0
+      if (!CALM && s.phase === 'idle') {
+        if (input.gyro) {
+          tx = -input.gyro.y * TILT_GYRO
+          ty = -input.gyro.x * TILT_GYRO
+        } else if (s.hover && input.pointer.active) {
+          tx = -input.pointer.y * TILT_POINTER_X
+          ty = input.pointer.x * TILT_POINTER_Y
+        }
+      }
+      const tl = tilt.current
+      tl.x = THREE.MathUtils.damp(tl.x, tx, LAMBDA.settle, dt)
+      tl.y = THREE.MathUtils.damp(tl.y, ty, LAMBDA.settle, dt)
+      inner.rotation.set(tl.x, tl.y, 0)
+    }
+
     const mat = materialRef.current
     if (mat) {
+      mat.uniforms.uDraw.value = CALM ? 1 : EASE.glide(drawT.current)
       mat.uniforms.uTime.value = state.clock.elapsedTime * MIST_K
       mat.uniforms.uBreath.value = breath(state.clock.elapsedTime)
       mat.uniforms.uExposure.value = worldEvents.grade.exposure
@@ -170,14 +216,14 @@ export default function HoloPanel() {
       ;(smoke.uniforms.uColor.value as THREE.Color).copy(accentColor)
     }
 
-    const efTitle = ef(STAGGER.title)
+    const efTitle = reveal(fade, STAGGER.title)
     if (titleRef.current) {
       const t = titleRef.current as unknown as TroikaText
       t.fillOpacity = efTitle
       t.outlineOpacity = efTitle * 0.7
       titleRef.current.position.y = PANEL_H / 2 - 2.3 * scale - (1 - efTitle) * 0.4
     }
-    const efSub = ef(STAGGER.subtitle)
+    const efSub = reveal(fade, STAGGER.subtitle)
     if (subRef.current) {
       const t = subRef.current as unknown as TroikaText
       t.fillOpacity = efSub * 0.85
@@ -186,9 +232,22 @@ export default function HoloPanel() {
     }
 
     const el = htmlRef.current
+    if (el !== htmlEl.current) {
+      htmlEl.current = el
+      htmlOpacity.current = -1
+      htmlOn.current = null
+    }
     if (el) {
-      el.style.opacity = String(ef(STAGGER.body))
-      el.classList.toggle('is-live', fade > 0.85)
+      const o = Math.round(reveal(fade, STAGGER.body) * 500) / 500
+      if (o !== htmlOpacity.current) {
+        htmlOpacity.current = o
+        el.style.opacity = String(o)
+      }
+      const on = fade > 0.85
+      if (on !== htmlOn.current) {
+        htmlOn.current = on
+        el.classList.toggle('is-live', on)
+      }
     }
   })
 
@@ -205,7 +264,7 @@ export default function HoloPanel() {
 
   return (
     <group ref={groupRef} position={node.worldPosition}>
-      <group position={[0, PANEL_H * PANEL_LIFT, PANEL_Z]}>
+      <group ref={innerRef} position={[0, PANEL_H * PANEL_LIFT, PANEL_Z]}>
         {mats && (
           <mesh material={mats.smoke} position={[0, 0, -0.06]} renderOrder={1}>
             <planeGeometry args={[PANEL_W + GLOW_PAD_W, PANEL_H + GLOW_PAD_H]} />
@@ -222,7 +281,7 @@ export default function HoloPanel() {
 
         <Text
           ref={titleRef}
-          position={[-PANEL_W / 2 + 2.2 * scale, PANEL_H / 2 - 2.3 * scale, 0.05]}
+          position={[-PANEL_W / 2 + 2.2 * scale, PANEL_H / 2 - 2.3 * scale, TITLE_Z]}
           renderOrder={3}
           anchorX="left"
           anchorY="middle"
@@ -244,7 +303,7 @@ export default function HoloPanel() {
         {node.subtitle && (
           <Text
             ref={subRef}
-            position={[-PANEL_W / 2 + 2.2 * scale, PANEL_H / 2 - 4.7 * scale, 0.05]}
+            position={[-PANEL_W / 2 + 2.2 * scale, PANEL_H / 2 - 4.7 * scale, SUB_Z]}
             renderOrder={3}
             anchorX="left"
             anchorY="middle"
@@ -269,7 +328,7 @@ export default function HoloPanel() {
             transform
             occlude={false}
             distanceFactor={HTML_DISTANCE}
-            position={[htmlX, -PANEL_H * 0.15, 0.05]}
+            position={[htmlX, -PANEL_H * 0.15, HTML_Z]}
             zIndexRange={[20, 0]}
             style={{ width: `${htmlPx}px` }}
             wrapperClass="holo-html"

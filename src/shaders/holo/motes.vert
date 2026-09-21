@@ -3,6 +3,7 @@
 uniform float uTime;
 uniform float uPixelRatio;
 uniform vec2  uSize;
+uniform float uGather;
 
 attribute vec3 aSeed;
 
@@ -20,6 +21,9 @@ void main() {
   float dir = mix(-1.0, 1.0, step(0.5, s3));
   float ang = s1 * TAU + uTime * (0.008 + 0.014 * s0) * dir;
   float rho = 0.45 + 1.15 * pow(s2, 0.75);
+  float g = 1.0 - uGather;
+  ang += g * g * 1.6 * dir;
+  rho *= 1.0 + 0.6 * g * g;
 
   vec2 halfR = uSize * 0.5;
   vec3 pos = vec3(cos(ang) * halfR.x * rho, sin(ang) * halfR.y * rho, (s0 - 0.5) * 5.0);

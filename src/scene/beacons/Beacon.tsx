@@ -122,8 +122,8 @@ const CLICK_BLUE = new THREE.Color(CLICK_BLUE_HEX)
 const CLICK_BLUE_DEEP = new THREE.Color(CLICK_BLUE_DEEP_HEX)
 const LABEL_BASE = CLICK_BLUE.clone().lerp(WHITE, 0.62)
 
-const PANEL_INSET_X = 1.4
-const PANEL_INSET_Y = 0.4
+const RIM_PAD_X = 0.4
+const RIM_PAD_Y = 0.8
 const panelRect = { stamp: -1, on: false, x: 0, y: 0, hx: 0, hy: 0 }
 
 function measurePanel(camera: THREE.Camera, center: THREE.Vector3, portrait: boolean, stamp: number) {
@@ -140,8 +140,8 @@ function measurePanel(camera: THREE.Camera, center: THREE.Vector3, portrait: boo
   panelRect.on = probeA.z < 1
   panelRect.x = probeA.x
   panelRect.y = probeA.y
-  panelRect.hx = Math.abs(probeB.x - probeA.x) * (1 - (2 * PANEL_INSET_X) / w)
-  panelRect.hy = Math.abs(probeB.y - probeA.y) * (1 - (2 * PANEL_INSET_Y) / h)
+  panelRect.hx = Math.abs(probeB.x - probeA.x) * (1 + (2 * RIM_PAD_X) / w)
+  panelRect.hy = Math.abs(probeB.y - probeA.y) * (1 + (2 * RIM_PAD_Y) / h)
   return panelRect
 }
 

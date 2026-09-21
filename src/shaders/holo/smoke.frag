@@ -15,6 +15,7 @@ void main() {
   vec2 m = uSize * 0.5 - abs(p);
   float edgeFade = smoothstep(0.0, 3.0, min(m.x, m.y));
   float mask = 0.94 * exp(-pow(max(d, 0.0) / 2.0, 1.6)) * edgeFade;
+  if (mask * uOpacity < 0.0015) discard;
   vec3 ink = vec3(0.0009, 0.0018, 0.0046) + uColor * uColor * 0.045;
   gl_FragColor = vec4(ink, mask * uOpacity);
   #include <colorspace_fragment>
