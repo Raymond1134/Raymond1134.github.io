@@ -17,11 +17,14 @@ import MediaTile from './MediaTile'
 import HoloMotes from './HoloMotes'
 import { renderInline } from '@/ui/markdown'
 import { glyph } from '@/ui/glyphs'
-import { panelSizeFor, PANEL_Z, PANEL_LIFT } from './panelLayout'
+import { panelSizeFor, panelContent, PANEL_Z, PANEL_LIFT } from './panelLayout'
 import '@/styles/holo.css'
 
-const HTML_DISTANCE = 12
-const HTML_PX_TO_WORLD = HTML_DISTANCE / 400
+type Fit = 'card' | 'tall' | 'wide'
+
+const PX_TO_WORLD: Record<Fit, number> = { card: 12 / 400, tall: 0.065, wide: 0.036 }
+const CARD_HTML_PX = 560
+const SHOW_AT = 0.85
 
 const LOOK_FADE_START = 0.6
 const LOOK_FADE_END = 1.4
@@ -44,6 +47,9 @@ const TITLE_Z = 0.5
 const SUB_Z = 0.4
 const HTML_Z = 0.25
 
+const MEASURE_EVERY = 0.4
+const MEDIA_GAP = 1.2
+
 const proj = new THREE.Vector3()
 
 const STAGGER = { plate: 0, title: 0.18, subtitle: 0.3, motes: 0.38, body: 0.5, media: 0.6 } as const
@@ -55,17 +61,57 @@ const reveal = (fade: number, offset: number) =>
 interface TroikaText {
   fillOpacity: number
   outlineOpacity: number
+  textRenderInfo?: { blockBounds: number[] } | null
+}
+
+function putRect(i: number, x0: number, y0: number, x1: number, y1: number, u: number, oy: number) {
+  const r = panelContent.rects[i]
+  r.x = ((x0 + x1) / 2) * u
+  r.y = oy + ((y0 + y1) / 2) * u
+  r.hw = ((x1 - x0) / 2) * u
+  r.hh = ((y1 - y0) / 2) * u
+}
+
+function putText(i: number, mesh: THREE.Mesh | null, x: number, y: number, u: number, oy: number) {
+  const bb = (mesh as unknown as TroikaText | null)?.textRenderInfo?.blockBounds
+  if (!bb) return i
+  putRect(i, x + bb[0], y + bb[1], x + bb[2], y + bb[3], u, oy)
+  return i + 1
 }
 
 export default function HoloPanel() {
   const node = useStore((s) => s.graph.nodes.get(s.currentId)!)
   const portrait = useStore((s) => s.portrait)
+  const compact = useStore((s) => s.compact)
 
-  const { w: PANEL_W, h: PANEL_H } = panelSizeFor(portrait)
+  const { w: PANEL_W, h: PANEL_H } = panelSizeFor(portrait, compact)
   const scale = PANEL_W / 30
 
   const accent = node.color ?? BEACON_DEFAULT_COLOR
   const accentColor = useMemo(() => new THREE.Color(accent), [accent])
+
+  const fit: Fit = compact ? (portrait ? 'tall' : 'wide') : 'card'
+  const textX = -PANEL_W / 2 + 2.2 * scale
+  const titleY = PANEL_H / 2 - 2.3 * scale
+  const subY = PANEL_H / 2 - 4.7 * scale
+  const titleSize = Math.min(2.45 * scale, (PANEL_W - 4.4 * scale) / (node.title.length * 0.6))
+  const subSize = node.subtitle
+    ? Math.min((fit === 'tall' ? 1.3 : 1.15) * scale, (PANEL_W - 4.4 * scale) / (node.subtitle.length * 0.58))
+    : 0
+
+  const pxToWorld = PX_TO_WORLD[fit]
+  const htmlPx =
+    fit === 'card' ? Math.round(CARD_HTML_PX * scale) : Math.round((PANEL_W - 4.4 * scale) / pxToWorld)
+  const htmlWorldW = htmlPx * pxToWorld
+  const htmlX = textX + htmlWorldW / 2
+  const htmlY =
+    fit === 'card' ? -PANEL_H * 0.15 : PANEL_H / 2 - (node.subtitle ? 6.3 : 4.2) * scale
+  const linkCount = node.links.length
+
+  const mediaW = fit === 'card' ? 10 : Math.min(PANEL_W - 4.4 * scale, 12)
+  const mediaX = fit === 'card' ? PANEL_W / 2 - 6.5 : textX + mediaW / 2
+  const mediaY = fit === 'card' ? PANEL_H / 2 - 6 : -mediaW / 3.2
+  const mediaStep = fit === 'card' ? 8 : mediaW / 1.6 + 1
 
   const fadeRef = useRef(0)
   const moteFade = useRef(0)
@@ -80,6 +126,10 @@ export default function HoloPanel() {
   const htmlEl = useRef<HTMLDivElement | null>(null)
   const htmlOpacity = useRef(-1)
   const htmlOn = useRef<boolean | null>(null)
+  const htmlShown = useRef(false)
+  const htmlH = useRef(0)
+  const measureIn = useRef(0)
+  const mediaRef = useRef<THREE.Group>(null)
   const titleRef = useRef<THREE.Mesh>(null)
   const subRef = useRef<THREE.Mesh>(null)
   const htmlRef = useRef<HTMLDivElement>(null)
@@ -221,14 +271,14 @@ export default function HoloPanel() {
       const t = titleRef.current as unknown as TroikaText
       t.fillOpacity = efTitle
       t.outlineOpacity = efTitle * 0.7
-      titleRef.current.position.y = PANEL_H / 2 - 2.3 * scale - (1 - efTitle) * 0.4
+      titleRef.current.position.y = titleY - (1 - efTitle) * 0.4
     }
     const efSub = reveal(fade, STAGGER.subtitle)
     if (subRef.current) {
       const t = subRef.current as unknown as TroikaText
       t.fillOpacity = efSub * 0.85
       t.outlineOpacity = efSub * 0.55
-      subRef.current.position.y = PANEL_H / 2 - 4.7 * scale - (1 - efSub) * 0.4
+      subRef.current.position.y = subY - (1 - efSub) * 0.4
     }
 
     const el = htmlRef.current
@@ -236,31 +286,51 @@ export default function HoloPanel() {
       htmlEl.current = el
       htmlOpacity.current = -1
       htmlOn.current = null
+      htmlShown.current = false
+      htmlH.current = 0
+      measureIn.current = 0
     }
     if (el) {
+      measureIn.current -= dt
+      if (measureIn.current <= 0) {
+        measureIn.current = MEASURE_EVERY
+        htmlH.current = el.offsetHeight
+      }
       const o = Math.round(reveal(fade, STAGGER.body) * 500) / 500
       if (o !== htmlOpacity.current) {
         htmlOpacity.current = o
         el.style.opacity = String(o)
       }
-      const on = fade > 0.85
+      const on = fade > SHOW_AT
       if (on !== htmlOn.current) {
         htmlOn.current = on
         el.classList.toggle('is-live', on)
       }
+      if (on && !htmlShown.current) {
+        htmlShown.current = true
+        el.classList.add('is-shown')
+      }
     }
+
+    const htmlWorldH = htmlH.current * pxToWorld
+    const mg = mediaRef.current
+    if (mg) mg.position.y = fit === 'card' ? 0 : htmlY - htmlWorldH - MEDIA_GAP
+
+    let n = 0
+    if (inner && fade > 0.01) {
+      const u = inner.scale.x
+      const oy = inner.position.y
+      n = putText(n, titleRef.current, textX, titleY, u, oy)
+      n = putText(n, subRef.current, textX, subY, u, oy)
+      if (el && htmlWorldH > 0) {
+        const top = fit === 'card' ? htmlY + htmlWorldH / 2 : htmlY
+        putRect(n++, htmlX - htmlWorldW / 2, top - htmlWorldH, htmlX + htmlWorldW / 2, top, u, oy)
+      }
+    }
+    panelContent.count = n
   })
 
   if (!live) return null
-
-  const titleSize = Math.min(2.45 * scale, (PANEL_W - 4.4 * scale) / (node.title.length * 0.6))
-  const subSize = node.subtitle
-    ? Math.min(1.15 * scale, (PANEL_W - 4.4 * scale) / (node.subtitle.length * 0.58))
-    : 0
-
-  const htmlPx = Math.round(560 * scale)
-  const htmlWorldW = htmlPx * HTML_PX_TO_WORLD
-  const htmlX = -PANEL_W / 2 + 2.2 * scale + htmlWorldW / 2
 
   return (
     <group ref={groupRef} position={node.worldPosition}>
@@ -281,7 +351,7 @@ export default function HoloPanel() {
 
         <Text
           ref={titleRef}
-          position={[-PANEL_W / 2 + 2.2 * scale, PANEL_H / 2 - 2.3 * scale, TITLE_Z]}
+          position={[textX, titleY, TITLE_Z]}
           renderOrder={3}
           anchorX="left"
           anchorY="middle"
@@ -303,7 +373,7 @@ export default function HoloPanel() {
         {node.subtitle && (
           <Text
             ref={subRef}
-            position={[-PANEL_W / 2 + 2.2 * scale, PANEL_H / 2 - 4.7 * scale, SUB_Z]}
+            position={[textX, subY, SUB_Z]}
             renderOrder={3}
             anchorX="left"
             anchorY="middle"
@@ -327,8 +397,8 @@ export default function HoloPanel() {
           <Html
             transform
             occlude={false}
-            distanceFactor={HTML_DISTANCE}
-            position={[htmlX, -PANEL_H * 0.15, HTML_Z]}
+            distanceFactor={pxToWorld * 400}
+            position={[htmlX, htmlY, HTML_Z]}
             zIndexRange={[20, 0]}
             style={{ width: `${htmlPx}px` }}
             wrapperClass="holo-html"
@@ -336,6 +406,7 @@ export default function HoloPanel() {
             <div
               ref={htmlRef}
               className="holo-body"
+              data-fit={fit === 'card' ? undefined : fit}
               style={{ opacity: 0, '--holo-accent': accent } as CSSProperties}
             >
               {node.body && (
@@ -348,8 +419,8 @@ export default function HoloPanel() {
 
               {node.links.length > 0 && (
                 <ul className="holo-links">
-                  {node.links.map((l) => (
-                    <li key={l.url}>
+                  {node.links.map((l, i) => (
+                    <li key={l.url} style={{ '--i': i } as CSSProperties}>
                       <a
                         href={l.url}
                         target={l.url.startsWith('http') ? '_blank' : undefined}
@@ -366,25 +437,29 @@ export default function HoloPanel() {
 
               {node.tags.length > 0 && (
                 <ul className="holo-tags">
-                  {node.tags.map((t) => <li key={t}>{t}</li>)}
+                  {node.tags.map((t, i) => (
+                    <li key={t} style={{ '--i': linkCount + i } as CSSProperties}>{t}</li>
+                  ))}
                 </ul>
               )}
             </div>
           </Html>
         )}
 
-        <Suspense fallback={null}>
-          {node.media.map((m, i) => (
-            <MediaTile
-              key={m.src}
-              media={m}
-              position={[PANEL_W / 2 - 6.5, PANEL_H / 2 - 6 - i * 8, 0.3]}
-              width={10}
-              accent={accentColor}
-              fadeRef={mediaFade}
-            />
-          ))}
-        </Suspense>
+        <group ref={mediaRef}>
+          <Suspense fallback={null}>
+            {node.media.map((m, i) => (
+              <MediaTile
+                key={m.src}
+                media={m}
+                position={[mediaX, mediaY - i * mediaStep, 0.3]}
+                width={mediaW}
+                accent={accentColor}
+                fadeRef={mediaFade}
+              />
+            ))}
+          </Suspense>
+        </group>
       </group>
     </group>
   )

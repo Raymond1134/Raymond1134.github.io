@@ -35,7 +35,12 @@ function TileChrome({
   accent: THREE.Color
   fadeRef: { current: number }
 }) {
-  const edges = useMemo(() => new THREE.EdgesGeometry(new THREE.PlaneGeometry(w + 0.3, h + 0.3)), [w, h])
+  const edges = useMemo(() => {
+    const plane = new THREE.PlaneGeometry(w + 0.3, h + 0.3)
+    const built = new THREE.EdgesGeometry(plane)
+    plane.dispose()
+    return built
+  }, [w, h])
   useEffect(() => () => edges.dispose(), [edges])
 
   const lineMat = useRef<THREE.LineBasicMaterial>(null)
@@ -100,10 +105,23 @@ interface VideoAssets {
   tex: THREE.VideoTexture
 }
 
-function VideoTile({ media, position, width: w, accent, fadeRef }: TileProps) {
+interface SurfaceProps extends TileProps {
+  poster: THREE.Texture | null
+}
+
+function VideoTile(props: TileProps) {
+  if (props.media.poster) return <PosterVideoTile {...props} posterSrc={props.media.poster} />
+  return <VideoSurface {...props} poster={null} />
+}
+
+function PosterVideoTile({ posterSrc, ...props }: TileProps & { posterSrc: string }) {
+  const poster = useTexture(posterSrc, applySRGB)
+  return <VideoSurface {...props} poster={poster} />
+}
+
+function VideoSurface({ media, position, width: w, accent, fadeRef, poster }: SurfaceProps) {
   const coarse = useStore((s) => s.coarse)
   const [playing, setPlaying] = useState(false)
-  const poster = useTexture(media.poster ?? media.src, applySRGB)
   const assetsRef = useRef<VideoAssets | null>(null)
   const [assets, setAssets] = useState<VideoAssets | null>(null)
   const group = useRef<THREE.Group>(null)
@@ -159,31 +177,28 @@ function VideoTile({ media, position, width: w, accent, fadeRef }: TileProps) {
   })
 
   const h = w / 1.777
+  const map = assets && (playing || !poster) ? assets.tex : poster
   return (
     <group ref={group} position={position}>
-      <mesh
-        onPointerUp={(e) => {
-          if (input.dragDistance > TAP_SLOP) return
-          const a = assetsRef.current
-          if (!a) return
-          e.stopPropagation()
-          if (playing) {
-            a.video.pause()
-            setPlaying(false)
-          } else {
-            a.video.play().then(() => setPlaying(true)).catch(() => {})
-          }
-        }}
-      >
-        <planeGeometry args={[w, h]} />
-        <meshBasicMaterial
-          ref={mat}
-          map={playing && assets ? assets.tex : poster}
-          transparent
-          opacity={0}
-          toneMapped={false}
-        />
-      </mesh>
+      {map && (
+        <mesh
+          onPointerUp={(e) => {
+            if (input.dragDistance > TAP_SLOP) return
+            const a = assetsRef.current
+            if (!a) return
+            e.stopPropagation()
+            if (playing) {
+              a.video.pause()
+              setPlaying(false)
+            } else {
+              a.video.play().then(() => setPlaying(true)).catch(() => {})
+            }
+          }}
+        >
+          <planeGeometry args={[w, h]} />
+          <meshBasicMaterial ref={mat} map={map} transparent opacity={0} toneMapped={false} />
+        </mesh>
+      )}
 
       <TileChrome w={w} h={h} accent={accent} fadeRef={fadeRef} />
 

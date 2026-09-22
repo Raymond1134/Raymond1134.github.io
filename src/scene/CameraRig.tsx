@@ -73,8 +73,9 @@ function anchorDistance(camera: THREE.PerspectiveCamera, panelWidth: number, pan
   const hFov = 2 * Math.atan(Math.tan(vFov / 2) * camera.aspect)
   const distForWidth = panelWidth / 2 / Math.tan(hFov / 2)
   const distForHeight = panelHeight / 2 / Math.tan(vFov / 2)
+  const panel = panelSizeFor(useStore.getState().portrait)
 
-  return Math.max(distForWidth, distForHeight) * 1.35
+  return Math.max(distForWidth, distForHeight) * (panel.fit ?? 1.35)
 }
 
 const RISE = 0.09

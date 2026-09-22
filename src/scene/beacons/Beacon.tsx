@@ -19,7 +19,7 @@ import { ATMOSPHERE_ORDER } from '@/scene/renderOrder'
 import { worldEvents } from '@/scene/worldEvents'
 import { LUM, AERIAL_K, DOME_STOPS } from '@/scene/lightPyramid'
 import { NO_COMPOSER } from '@/scene/composerPolicy'
-import { panelSizeFor, PANEL_Z, PANEL_LIFT } from '@/scene/ui3d/panelLayout'
+import { panelContent, PANEL_Z } from '@/scene/ui3d/panelLayout'
 import { LAMBDA, EASE } from '@/motion/tokens'
 import { BEACON_DEFAULT_COLOR, CLICK_BLUE as CLICK_BLUE_HEX, CLICK_BLUE_DEEP as CLICK_BLUE_DEEP_HEX } from './palette'
 import type { Quality } from '@/state/store'
@@ -52,6 +52,11 @@ const LABEL_HOVER_LIFT = CALM ? 0 : 0.2
 const LABEL_HOVER_SCALE = CALM ? 0 : 0.08
 const LABEL_STAGGER = 0.35
 const LABEL_LEAD = 0.06
+const LABEL_ABOVE = 1.7
+const LABEL_SWAP = 0.16
+const LABEL_TOP_EDGE = 0.99
+
+const PRESS_CONFIRM = 0.08
 
 const SPIN_REST = CALM ? 0.03 : 0.11
 const SPIN_HOVER = CALM ? 0 : 1.5
@@ -85,12 +90,17 @@ const BECKON_SWEEP = 0.3
 interface Ring {
   age: number
   k: number
+  k0: number
+  rise: number
 }
+
+const ringK = (r: Ring) =>
+  r.k0 + (r.k - r.k0) * THREE.MathUtils.smoothstep(r.age - r.rise, 0, RING_ATTACK)
 
 const ringEnvelope = (r: Ring) => {
   if (r.age >= RING_LIFE) return 0
   const fall = 1 - r.age / RING_LIFE
-  return r.k * THREE.MathUtils.smoothstep(r.age, 0, RING_ATTACK) * fall * fall
+  return ringK(r) * THREE.MathUtils.smoothstep(r.age, 0, RING_ATTACK) * fall * fall
 }
 
 const ringRadius = (r: Ring) =>
@@ -99,12 +109,18 @@ const ringRadius = (r: Ring) =>
 function fireRing(rings: Ring[], k: number) {
   const young = rings[0].age < rings[1].age ? rings[0] : rings[1]
   if (young.age < RING_MERGE) {
-    young.k = Math.max(young.k, k)
+    if (k > young.k) {
+      young.k0 = ringK(young)
+      young.k = k
+      young.rise = young.age
+    }
     return
   }
   const old = young === rings[0] ? rings[1] : rings[0]
   old.age = 0
   old.k = k
+  old.k0 = k
+  old.rise = 0
 }
 
 const DEEP_TINT = new THREE.Color('#233252')
@@ -122,42 +138,49 @@ const CLICK_BLUE = new THREE.Color(CLICK_BLUE_HEX)
 const CLICK_BLUE_DEEP = new THREE.Color(CLICK_BLUE_DEEP_HEX)
 const LABEL_BASE = CLICK_BLUE.clone().lerp(WHITE, 0.62)
 
-const RIM_PAD_X = 0.4
-const RIM_PAD_Y = 0.8
-const panelRect = { stamp: -1, on: false, x: 0, y: 0, hx: 0, hy: 0 }
+const contentAt = { stamp: -1, n: 0 }
+const contentNdc = panelContent.rects.map(() => ({ x: 0, y: 0, hx: 0, hy: 0 }))
 
-function measurePanel(camera: THREE.Camera, center: THREE.Vector3, portrait: boolean, stamp: number) {
-  if (panelRect.stamp === stamp) return panelRect
-  panelRect.stamp = stamp
-  const { w, h } = panelSizeFor(portrait)
+function measureContent(camera: THREE.Camera, center: THREE.Vector3, stamp: number) {
+  if (contentAt.stamp === stamp) return
+  contentAt.stamp = stamp
   camRight.set(1, 0, 0).applyQuaternion(camera.quaternion)
   camUp.set(0, 1, 0).applyQuaternion(camera.quaternion)
   camBack.set(0, 0, 1).applyQuaternion(camera.quaternion)
-  probeA.copy(center).addScaledVector(camUp, h * PANEL_LIFT).addScaledVector(camBack, PANEL_Z)
-  probeB.copy(probeA).addScaledVector(camRight, w / 2).addScaledVector(camUp, h / 2)
-  probeA.project(camera)
-  probeB.project(camera)
-  panelRect.on = probeA.z < 1
-  panelRect.x = probeA.x
-  panelRect.y = probeA.y
-  panelRect.hx = Math.abs(probeB.x - probeA.x) * (1 + (2 * RIM_PAD_X) / w)
-  panelRect.hy = Math.abs(probeB.y - probeA.y) * (1 + (2 * RIM_PAD_Y) / h)
-  return panelRect
+  contentAt.n = 0
+  for (let i = 0; i < panelContent.count; i++) {
+    const r = panelContent.rects[i]
+    probeA.copy(center).addScaledVector(camRight, r.x).addScaledVector(camUp, r.y).addScaledVector(camBack, PANEL_Z)
+    probeB.copy(probeA).addScaledVector(camRight, r.hw).addScaledVector(camUp, r.hh)
+    probeA.project(camera)
+    probeB.project(camera)
+    if (probeA.z >= 1) continue
+    const s = contentNdc[contentAt.n++]
+    s.x = probeA.x
+    s.y = probeA.y
+    s.hx = Math.abs(probeB.x - probeA.x)
+    s.hy = Math.abs(probeB.y - probeA.y)
+  }
 }
 
-function labelOverPanel(camera: THREE.Camera, center: THREE.Vector3, halfW: number, halfH: number) {
-  if (!panelRect.on) return 0
+function labelOverContent(camera: THREE.Camera, center: THREE.Vector3, halfW: number, halfH: number) {
+  if (contentAt.n === 0) return 0
   probeB.copy(center).addScaledVector(camRight, halfW).addScaledVector(camUp, halfH).project(camera)
   probeA.copy(center).project(camera)
   if (probeA.z > 1) return 0
   const lhx = Math.abs(probeB.x - probeA.x)
   const lhy = Math.abs(probeB.y - probeA.y)
-  const gx = Math.abs(probeA.x - panelRect.x) - panelRect.hx - lhx
-  const gy = Math.abs(probeA.y - panelRect.y) - panelRect.hy - lhy
-  return (
-    (1 - THREE.MathUtils.smoothstep(gx, -lhx, 0.01)) *
-    (1 - THREE.MathUtils.smoothstep(gy, -lhy, 0.01))
-  )
+  let over = 0
+  for (let i = 0; i < contentAt.n; i++) {
+    const s = contentNdc[i]
+    const gx = Math.abs(probeA.x - s.x) - s.hx - lhx
+    const gy = Math.abs(probeA.y - s.y) - s.hy - lhy
+    over = Math.max(
+      over,
+      (1 - THREE.MathUtils.smoothstep(gx, -lhx, 0.01)) * (1 - THREE.MathUtils.smoothstep(gy, -lhy, 0.01)),
+    )
+  }
+  return over
 }
 
 const QUAD = new THREE.PlaneGeometry(2, 2)
@@ -363,12 +386,19 @@ export default function Beacon({ node, role }: Props) {
   const label = useRef<THREE.Group>(null)
   const labelText = useRef<THREE.Mesh>(null)
   const labelT = useRef(0)
+  const labelSide = useRef(0)
+  const labelSwap = useRef(1)
   const idleAt = useRef(0)
   const wasIdle = useRef(false)
   const hoverT = useRef(0)
   const pressed = useRef(false)
   const spin = useRef(0)
-  const rings = useRef<Ring[]>([{ age: 9, k: 0 }, { age: 9, k: 0 }])
+  const pressT = useRef(0)
+  const pressFired = useRef(false)
+  const rings = useRef<Ring[]>([
+    { age: 9, k: 0, k0: 0, rise: 0 },
+    { age: 9, k: 0, k0: 0, rise: 0 },
+  ])
   const wasHovered = useRef(false)
   const wasGoal = useRef(false)
   const wasLanded = useRef(false)
@@ -444,9 +474,15 @@ export default function Beacon({ node, role }: Props) {
     const st = useStore.getState()
     const now = performance.now()
     if (pressed.current && (!input.dragging || input.dragDistance > TAP_SLOP)) pressed.current = false
-    const lit = hovered || pressed.current
+    if (pressed.current) pressT.current += dt
+    const pressLit = pressed.current && pressT.current >= PRESS_CONFIRM
+    if (pressLit && !pressFired.current) {
+      pressFired.current = true
+      fireRing(rings.current, RING_K.press)
+    }
+    const lit = hovered || pressLit
     hoverT.current +=
-      ((lit ? 1 : 0) - hoverT.current) * (1 - Math.pow(pressed.current ? 1e-4 : 0.01, dt))
+      ((lit ? 1 : 0) - hoverT.current) * (1 - Math.pow(pressLit ? 1e-4 : 0.01, dt))
     const h = hoverT.current
     if (hovered && !wasHovered.current) fireRing(rings.current, RING_K.hover)
     wasHovered.current = hovered
@@ -638,19 +674,43 @@ export default function Beacon({ node, role }: Props) {
       const lm = labelText.current
       if (lm) {
         const tt = lm as unknown as TroikaLabel
-        const ly = LABEL_Y - (1 - lt) * LABEL_RISE + h * LABEL_HOVER_LIFT
-        lm.position.y = ly
+        const bb = tt.textRenderInfo?.blockBounds
+        const halfW = bb ? (bb[2] - bb[0]) / 2 : node.title.length * 0.33
+        const halfH = bb ? (bb[3] - bb[1]) / 2 : 0.55
+        const lift = h * LABEL_HOVER_LIFT - (1 - lt) * LABEL_RISE
         const cur = st.graph.nodes.get(st.currentId)
-        if (cur && o > 0.01) {
-          if (worldEvents.panelDim > 0.01) {
-            measurePanel(state.camera, cur.worldPosition, st.portrait, t)
-            const bb = tt.textRenderInfo?.blockBounds
-            const halfW = bb ? (bb[2] - bb[0]) / 2 : node.title.length * 0.33
-            const halfH = bb ? (bb[3] - bb[1]) / 2 : 0.55
-            lblCenter.copy(node.worldPosition).addScaledVector(camUp, (ly - halfH) * ls)
-            const over = labelOverPanel(state.camera, lblCenter, halfW * ls, halfH * ls)
-            o *= 1 - over * worldEvents.panelDim * (1 - h)
+        const veil = THREE.MathUtils.smoothstep(worldEvents.panelDim, 0.02, 0.45)
+        let side = labelSide.current
+        let below = 0
+        let above = 0
+        if (cur && veil > 0.01 && (idleNow || lt > 0.01)) {
+          measureContent(state.camera, cur.worldPosition, t)
+          lblCenter.copy(node.worldPosition).addScaledVector(camUp, (LABEL_Y + lift - halfH) * ls)
+          below = labelOverContent(state.camera, lblCenter, halfW * ls, halfH * ls)
+          lblCenter.copy(node.worldPosition).addScaledVector(camUp, (LABEL_ABOVE + lift + halfH) * ls)
+          above = labelOverContent(state.camera, lblCenter, halfW * ls, halfH * ls)
+          probeA.copy(lblCenter).addScaledVector(camUp, halfH * ls).project(state.camera)
+          if (probeA.y > LABEL_TOP_EDGE) above = 1
+          if (h < 0.05) {
+            if (side === 0 && below > 0.5 && above < 0.05) side = 1
+            else if (side === 1 && (below < 0.05 || above > below)) side = 0
           }
+        } else if (h < 0.05) {
+          side = 0
+        }
+        if (side !== labelSide.current && o < 0.02) {
+          labelSide.current = side
+          labelSwap.current = 1
+        } else if (side !== labelSide.current) {
+          labelSwap.current = Math.max(0, labelSwap.current - dt / LABEL_SWAP)
+          if (labelSwap.current === 0) labelSide.current = side
+        } else {
+          labelSwap.current = Math.min(1, labelSwap.current + dt / LABEL_SWAP)
+        }
+        lm.position.y = (labelSide.current ? LABEL_ABOVE + 2 * halfH : LABEL_Y) + lift
+        o *= 1 - (labelSide.current ? above : below) * veil * (1 - h)
+        o *= labelSwap.current * labelSwap.current
+        if (cur && o > 0.01) {
           dirSelf.copy(node.worldPosition).sub(state.camera.position).normalize()
           dirCur.copy(cur.worldPosition).sub(state.camera.position).normalize()
           o *= 1 - 0.85 * THREE.MathUtils.smoothstep(dirSelf.dot(dirCur), 0.985, 0.998) * (1 - h)
@@ -677,7 +737,8 @@ export default function Beacon({ node, role }: Props) {
           if (e.pointerType === 'mouse' || e.button !== 0 || !interactive) return
           e.stopPropagation()
           pressed.current = true
-          fireRing(rings.current, RING_K.press)
+          pressT.current = 0
+          pressFired.current = false
         }}
         onPointerMove={(e) => {
           if (!canHoverPointer || !interactive) return
