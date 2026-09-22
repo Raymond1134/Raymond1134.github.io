@@ -42,6 +42,8 @@ const PAR_TILT_Y = CALM ? 0 : 1.6
 const WINDUP = 1.2
 const WINDUP_COMPACT = 0.6
 
+const SHAKE_SPAN = 1.8
+
 const ROLL_A = CALM ? 0 : 1.6 * (Math.PI / 180)
 const ROLL_B = CALM ? 0 : 0.7 * (Math.PI / 180)
 const suspensionRoll = (t: number) =>
@@ -315,12 +317,16 @@ export default function CameraRig() {
       camera.position.add(driftOff.current)
     }
 
+    const sa = t - worldEvents.shake.at
+    const sh = !CALM && sa >= 0 && sa < SHAKE_SPAN ? worldEvents.shake.mag * Math.exp(-sa * 2.2) * Math.min(1, sa * 14) : 0
+
     applyLook(
       camera,
       lookTarget.current,
-      DRIFT_LOOK * Math.sin(2 * Math.PI * 0.011 * t) * k,
-      DRIFT_LOOK * Math.sin(2 * Math.PI * BREATH_HZ * 0.5 * t + 2.1) * k + worldEvents.camPitch,
-      suspensionRoll(t) * k,
+      DRIFT_LOOK * Math.sin(2 * Math.PI * 0.011 * t) * k + sh * 0.0018 * Math.sin(t * 25 + 0.4),
+      DRIFT_LOOK * Math.sin(2 * Math.PI * BREATH_HZ * 0.5 * t + 2.1) * k + worldEvents.camPitch +
+        sh * (0.0034 * Math.sin(t * 29) + 0.0014 * Math.sin(t * 47 + 0.7)),
+      suspensionRoll(t) * k + sh * (0.0052 * Math.sin(t * 21 + 1.3) + 0.0022 * Math.sin(t * 37 + 2.1)),
     )
   })
 

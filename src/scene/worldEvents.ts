@@ -42,4 +42,6 @@ export const worldEvents = {
     mag: 0,
     origin: new THREE.Vector3(),
   },
+
+  shake: { at: -1e9, mag: 0 },
 }

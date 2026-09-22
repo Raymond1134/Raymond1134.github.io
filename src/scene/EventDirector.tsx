@@ -120,7 +120,7 @@ export default function EventDirector() {
         showNextAt.current = t + 4 + Math.random() * 4
       } else {
         const pool = (Object.keys(SHOW) as ShowKind[]).filter(
-          (kd) => t - lastShow.current[kd] >= SHOW[kd].cd,
+          (kd) => !(calm && kd === 'quake') && t - lastShow.current[kd] >= SHOW[kd].cd,
         )
         if (pool.length === 0) {
           showNextAt.current = t + 8 + Math.random() * 6
@@ -156,6 +156,8 @@ export default function EventDirector() {
               pl.force = 4
               pl.glow = 0.15
             }
+            worldEvents.shake.at = t
+            worldEvents.shake.mag = 1
             playQuake()
           }
         }
