@@ -6,7 +6,9 @@ uniform float uTime;
 uniform vec3  uCenter;
 uniform float uFadeStart;
 uniform float uFadeEnd;
+uniform vec4  uBox;
 uniform vec2  uFocus;
+uniform float uFarBoost;
 uniform vec4  uLights[6];
 uniform vec3  uLightCols[6];
 uniform float uTorch;
@@ -39,6 +41,7 @@ varying float vGlint;
 varying float vPulse;
 varying float vPulseS;
 varying float vStretch;
+varying float vThin;
 varying vec2  vAxis;
 
 const float STREAK_T = 0.018;
@@ -64,14 +67,17 @@ void main() {
   float sizeClass = isDust * (0.42 + 0.30 * u)
                   + isFly  * (1.0 + 1.4 * u * u)
                   + isMote * (4.0 + 4.0 * u);
-  float cap = (isDust * 7.0 + isFly * 14.0 + isMote * 24.0) * uPixelRatio;
+  float vk = clamp(uResolution.y / (uPixelRatio * 760.0), 0.62, 1.0);
+  float cap = (isDust * 7.0 + isFly * 14.0 + isMote * 24.0) * uPixelRatio * vk;
 
   vDefocus = 1.0 - smoothstep(uFocus.x, uFocus.y, dist);
   float spread = 1.0 + 1.6 * vDefocus;
 
-  float pxRaw = uSize * uPixelRatio * sizeClass * (130.0 / dist);
-  float size0 = min(pxRaw, cap);
-  float size1 = min(pxRaw * spread, cap * (1.0 + vDefocus));
+  float far = 1.0 + uFarBoost * smoothstep(28.0, 72.0, dist);
+  float pxRaw = uSize * uPixelRatio * sizeClass * (130.0 / dist) * vk;
+  float size0 = min(pxRaw * far, cap);
+  float size1 = min(pxRaw * far * spread, cap * (1.0 + vDefocus));
+  float farK = min(pxRaw * spread, cap * (1.0 + vDefocus)) / size1;
 
   float dim = isDust * (0.30 + 0.48 * u * u)
             + isFly  * (0.62 + 0.50 * u)
@@ -103,11 +109,15 @@ void main() {
 
   float defDim = 1.0 / pow(grew, 1.2);
 
-  vFade = 1.0 - smoothstep(uFadeStart, uFadeEnd, length(p.xyz - uCenter));
+  vec3 bd = abs(p.xyz - uBox.xyz);
+  vFade = (1.0 - smoothstep(uFadeStart, uFadeEnd, length(p.xyz - uCenter)))
+        * (1.0 - smoothstep(uBox.w - 10.0, uBox.w, max(bd.x, max(bd.y, bd.z))));
+
+  float voidGate = 0.35 + 0.65 * smoothstep(-0.3, 0.5, p.w);
 
   vec2 axis = vec2(1.0, 0.0);
   float L = 0.0;
-  if (uStreak > 0.001 && vFade > 0.02 && gl_Position.w > 0.05) {
+  if (uStreak > 0.001 && vFade * voidGate * dim * defDim > 0.04 && gl_Position.w > 0.05) {
     vec4 c1 = projectionMatrix * (modelViewMatrix * vec4(p.xyz - (v - uCamVel) * STREAK_T, 1.0));
     vec2 dpx = (gl_Position.xy / gl_Position.w - c1.xy / max(c1.w, 0.05)) * 0.5 * uResolution;
     float dl = length(dpx);
@@ -122,8 +132,9 @@ void main() {
   }
   gl_PointSize = px + L;
   vStretch = L / (px + L);
+  vThin = 1.0 - 0.45 * smoothstep(0.0, 0.6, vStretch) * smoothstep(3.0, 9.0, px / uPixelRatio);
   vAxis = axis;
-  float streakGain = pow(px / (px + 0.35 * L), 0.5);
+  float streakGain = pow(px / (px + 0.5 * L), 0.75);
 
   if (vFade <= 0.001) gl_Position = vec4(0.0, 0.0, 2.0, 1.0);
 
@@ -136,8 +147,6 @@ void main() {
   }
   vLit = min(lit, 1.0) * (1.0 - isMote);
   vLitCol = litCol / max(lit, 1e-3);
-
-  float voidGate = 0.35 + 0.65 * smoothstep(-0.3, 0.5, p.w);
 
   if (uReveal >= 1.0) {
     vReveal = 1.0;
@@ -157,7 +166,7 @@ void main() {
     vPulseS = clamp((pd - uPulseRadius) / uPulseBand, -1.0, 1.0);
   }
 
-  vGain  = dim * breathe * defDim * voidGate * tiny * streakGain * (1.0 + 0.8 * vTorch);
+  vGain  = dim * breathe * defDim * voidGate * tiny * streakGain * farK * farK * (1.0 + 0.8 * vTorch);
   vSpeed = length(v);
   vDepth = dist;
   vSeed  = seed;

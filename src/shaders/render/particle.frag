@@ -15,6 +15,7 @@ uniform vec3  uDeepColor;
 uniform vec2  uResolution;
 uniform float uExposure;
 uniform float uSeaScale;
+uniform float uStreakHeat;
 
 varying float vSpeed;
 varying float vDepth;
@@ -31,6 +32,7 @@ varying float vGlint;
 varying float vPulse;
 varying float vPulseS;
 varying float vStretch;
+varying float vThin;
 varying vec2  vAxis;
 
 void main() {
@@ -39,8 +41,7 @@ void main() {
   float h = 0.5 * vStretch;
   float sa = dot(c, vAxis);
   float streak = smoothstep(0.0, 0.3, vStretch);
-  float thin = 1.0 - 0.45 * smoothstep(0.0, 0.6, vStretch);
-  vec2 q = vec2(max(abs(sa) - h, 0.0), dot(c, vec2(-vAxis.y, vAxis.x)) / thin);
+  vec2 q = vec2(max(abs(sa) - h, 0.0), dot(c, vec2(-vAxis.y, vAxis.x)) / vThin);
   float r2 = dot(q, q) * 4.0 / (k * k);
   if (r2 > 1.0) discard;
 
@@ -71,6 +72,8 @@ void main() {
   heat = mix(heat * heat, heat, isFly);
 
   heat = max(heat, vTorch * (0.62 + 0.38 * fract(vSeed * 29.3)));
+
+  heat = max(heat, vStretch * uStreakHeat * (0.7 + 0.3 * fract(vSeed * 41.9)));
 
   vec3 col = mix(
     mix(uColorCold, uColorMid, smoothstep(0.0, 0.55, heat)),

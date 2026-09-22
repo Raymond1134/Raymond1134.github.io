@@ -1,4 +1,4 @@
-import { useRef, useEffect, useState } from 'react'
+import { useRef, useEffect } from 'react'
 import { useFrame, useThree } from '@react-three/fiber'
 import * as THREE from 'three'
 import { GPUComputationRenderer } from 'three/addons/misc/GPUComputationRenderer.js'
@@ -13,12 +13,17 @@ import { worldEvents } from './worldEvents'
 import { NO_COMPOSER } from './composerPolicy'
 import { CASTE, DEEP } from './lightPyramid'
 import { BEACON_DEFAULT_COLOR } from './beacons/palette'
-import { input } from '@/input/input'
+import { input, stillFor } from '@/input/input'
 import { LAMBDA } from '@/motion/tokens'
 import { useStore, PARTICLE_TEX, TRAVEL } from '@/state/store'
 import type { Quality } from '@/state/store'
 
 const BOX_HALF = 60
+const FWD = { portrait: 26, landscape: 8 } as const
+const FAR_BOOST = 0.5
+
+const VEL_STEP = { full: 1 / 30, lean: 1 / 20, drowse: 1 / 12 } as const
+const DROWSE_AFTER = 20
 
 const FADE_START = 40
 const FADE_END = 66
@@ -42,7 +47,10 @@ const WAKE_JUMP = 8
 const TORCH_RADIUS = 7
 const torchCol = new THREE.Color(site.meta.themeColorAccent).lerp(new THREE.Color(site.meta.themeColorHot), 0.35)
 
-const STREAK_CAP = NO_COMPOSER ? 22 : 40
+const STREAK_CAP: Record<Quality, number> = NO_COMPOSER
+  ? { low: 16, medium: 22, high: 22, ultra: 22 }
+  : { low: 26, medium: 32, high: 40, ultra: 40 }
+const STREAK_HEAT = NO_COMPOSER ? 0.45 : 0.25
 
 const SPIN_MAX = 2.5
 const SPIN_GAIN = 1.1 * WAKE_CALM
@@ -55,10 +63,15 @@ const FOCUS = {
 const forceScale = 1 / (TAU * TAU)
 const damping = Math.pow(BASE.damping, 1 / TAU)
 
-const field = { center: new THREE.Vector3(), init: false, maxSpeed: MAX_SPEED }
+const field = {
+  center: new THREE.Vector3(),
+  fwd: new THREE.Vector3(),
+  ahead: new THREE.Vector3(),
+  init: false,
+  maxSpeed: MAX_SPEED,
+}
 
-const wake = { speed: 0, live: false }
-const ptrPrev = new THREE.Vector3()
+const wake = { speed: 0, live: false, x: 0, y: 0 }
 const ptrVel = new THREE.Vector3()
 
 const handoff: {
@@ -77,6 +90,7 @@ const spinT = new THREE.Vector3()
 
 const tmpV = new THREE.Vector3()
 const rayV = new THREE.Vector3()
+const viewV = new THREE.Vector3()
 const bufV = new THREE.Vector2()
 
 type Variable = ReturnType<GPUComputationRenderer['addVariable']>
@@ -90,6 +104,7 @@ interface FieldAssets {
   posVar: Variable
   geometry: THREE.BufferGeometry
   material: THREE.ShaderMaterial
+  points: THREE.Points
   posIdx: number
   velIdx: number
 
@@ -99,6 +114,7 @@ interface FieldAssets {
 }
 
 function disposeAssets(a: FieldAssets) {
+  a.points.removeFromParent()
   a.gpu.dispose()
   a.geometry.dispose()
   a.material.dispose()
@@ -149,6 +165,7 @@ function buildAssets(gl: THREE.WebGLRenderer, size: number, opacity: number): Fi
     uDt: { value: 0 },
     uCenter: { value: new THREE.Vector3() },
     uBoxHalf: { value: BOX_HALF },
+    uVoidTick: { value: 1 },
   })
 
   const err = gpu.init()
@@ -185,7 +202,9 @@ function buildAssets(gl: THREE.WebGLRenderer, size: number, opacity: number): Fi
       uCenter: { value: new THREE.Vector3() },
       uFadeStart: { value: FADE_START },
       uFadeEnd: { value: FADE_END },
+      uBox: { value: new THREE.Vector4(0, 0, 0, BOX_HALF) },
       uFocus: { value: FOCUS.rest.clone() },
+      uFarBoost: { value: useStore.getState().portrait ? FAR_BOOST : 0 },
       uOpacity: { value: opacity },
       uSpeedScale: { value: (BASE.speedScale / TAU) * COLOR_WARMTH * CALM_K },
       uFogDensity: { value: 0.01 },
@@ -204,7 +223,8 @@ function buildAssets(gl: THREE.WebGLRenderer, size: number, opacity: number): Fi
       uPulseGlow: { value: 0 },
       uCamVel: { value: new THREE.Vector3() },
       uStreak: { value: 0 },
-      uStreakCap: { value: STREAK_CAP },
+      uStreakCap: { value: STREAK_CAP.medium },
+      uStreakHeat: { value: STREAK_HEAT },
       uPointMax: { value: pointRange ? pointRange[1] : 64 },
       uColorCold: { value: new THREE.Color(site.meta.themeColorCold) },
       uColorMid: { value: new THREE.Color(site.meta.themeColorMid) },
@@ -218,7 +238,11 @@ function buildAssets(gl: THREE.WebGLRenderer, size: number, opacity: number): Fi
     toneMapped: false,
   })
 
-  return { gpu, velVar, posVar, geometry, material, posIdx: 0, velIdx: 0, hearths, lightPos, lightCol }
+  const points = new THREE.Points(geometry, material)
+  points.frustumCulled = false
+  points.renderOrder = PARTICLE_ORDER
+
+  return { gpu, velVar, posVar, geometry, material, points, posIdx: 0, velIdx: 0, hearths, lightPos, lightCol }
 }
 
 function step(a: FieldAssets, dt: number, doVel: boolean) {
@@ -233,6 +257,7 @@ function step(a: FieldAssets, dt: number, doVel: boolean) {
   const next = 1 - a.posIdx
   const pu = a.posVar.material.uniforms
   pu.uDt.value = dt
+  pu.uVoidTick.value = doVel ? 1 : 0
   pu.texturePosition.value = a.posVar.renderTargets[a.posIdx].texture
   pu.textureVelocity.value = a.velVar.renderTargets[a.velIdx].texture
   a.gpu.doRenderTarget(a.posVar.material, a.posVar.renderTargets[next])
@@ -242,16 +267,11 @@ function step(a: FieldAssets, dt: number, doVel: boolean) {
 export default function ParticleField() {
   const gl = useThree((s) => s.gl)
   const quality = useStore((s) => s.quality)
-  const compact = useStore((s) => s.compact)
   const size = PARTICLE_TEX[quality]
+  const group = useRef<THREE.Group>(null)
   const assetsRef = useRef<FieldAssets | null>(null)
-  const [assets, setAssets] = useState<FieldAssets | null>(null)
-  const [dying, setDying] = useState<FieldAssets | null>(null)
-  const frame = useRef(0)
   const velDt = useRef(0)
   const travelDir = useRef(new THREE.Vector3())
-
-  const velEvery = quality === 'low' || compact ? 3 : 2
 
   useEffect(() => {
     let prev: FieldAssets | null = null
@@ -269,7 +289,8 @@ export default function ParticleField() {
 
     const built = buildAssets(gl, size, prev ? 0 : BASE_OPACITY)
     assetsRef.current = built
-    setAssets(built)
+    if (prev) group.current?.add(prev.points)
+    group.current?.add(built.points)
     useStore.getState().setFieldReady()
     return () => {
       assetsRef.current = null
@@ -297,8 +318,11 @@ export default function ParticleField() {
     const pu = a.posVar.material.uniforms
     const mu = a.material.uniforms
 
+    const reach = s.portrait ? FWD.portrait : FWD.landscape
+    state.camera.getWorldDirection(viewV).multiplyScalar(reach)
     if (!field.init) {
       field.center.copy(cam)
+      field.fwd.copy(viewV)
       camPrev.copy(cam)
       qPrev.copy(state.camera.quaternion)
       field.init = true
@@ -321,11 +345,15 @@ export default function ParticleField() {
     tmpV.copy(field.center).sub(cam)
     const lag = tmpV.length()
     if (lag > 18) field.center.copy(cam).addScaledVector(tmpV, 18 / lag - 1)
+    field.fwd.lerp(viewV, 1 - Math.exp(-dt / 0.4))
+    mu.uFarBoost.value = THREE.MathUtils.damp(mu.uFarBoost.value as number, s.portrait ? FAR_BOOST : 0, LAMBDA.settle, dt)
+    field.ahead.copy(field.center).add(field.fwd)
     pu.uCenter.value.copy(field.center)
 
     mu.uTime.value = t
     mu.uExposure.value = worldEvents.grade.exposure
-    ;(mu.uCenter.value as THREE.Vector3).copy(field.center)
+    ;(mu.uCenter.value as THREE.Vector3).copy(field.ahead)
+    ;(mu.uBox.value as THREE.Vector4).set(field.center.x, field.center.y, field.center.z, BOX_HALF)
     mu.uPixelRatio.value = state.gl.getPixelRatio()
     mu.uSize.value = SIZE_TIER[s.quality]
     state.gl.getDrawingBufferSize(bufV)
@@ -333,6 +361,7 @@ export default function ParticleField() {
 
     const streakT = CALM || s.phase !== 'flight' ? 0 : Math.pow(Math.sin(ft * Math.PI), 0.8)
     mu.uStreak.value = THREE.MathUtils.damp(mu.uStreak.value as number, streakT, LAMBDA.quick, dt)
+    mu.uStreakCap.value = STREAK_CAP[s.quality]
     ;(mu.uCamVel.value as THREE.Vector3).copy(camVel)
 
     const focusT = s.phase === 'flight' ? FOCUS.flight : s.phase === 'settle' ? FOCUS.land : FOCUS.rest
@@ -353,26 +382,34 @@ export default function ParticleField() {
 
     const pe = worldEvents.pointer
     const ip = input.pointer
+    const roam = s.phase === 'idle' && !s.overtureActive
     const fresh = ip.active && performance.now() - ip.movedAt < 2000
     wake.speed += ((fresh ? ip.speed : 0) - wake.speed) * (1 - Math.exp(-dt / 0.12))
     let targetW = 0
-    if (s.phase === 'idle' && !s.overtureActive && fresh) {
+    if (roam && fresh) {
       targetW = THREE.MathUtils.clamp(wake.speed / 400, 0.25, 1) * WAKE_CALM
     }
-    pe.w = THREE.MathUtils.damp(pe.w, targetW, targetW > pe.w ? LAMBDA.snap : LAMBDA.calm, dt)
+    pe.w = THREE.MathUtils.damp(pe.w, targetW, targetW > pe.w ? LAMBDA.snap : roam ? LAMBDA.calm : LAMBDA.quick, dt)
     if (pe.w > 0.001) {
       rayV.set(ip.x, ip.y, 0.5).unproject(state.camera).sub(cam).normalize()
       pe.pos.copy(cam).addScaledVector(rayV, WAKE_DEPTH)
     }
-    const live = fresh && pe.w > 0.001
-    if (live && wake.live && pe.pos.distanceTo(ptrPrev) < WAKE_JUMP) {
-      tmpV.copy(pe.pos).sub(ptrPrev).divideScalar(Math.max(rawDt, 1e-3)).clampLength(0, WAKE_VEL_MAX)
+    const live = roam && fresh && pe.w > 0.001
+    let stroke = false
+    if (live && wake.live) {
+      rayV.set(wake.x, wake.y, 0.5).unproject(state.camera).sub(cam).normalize()
+      tmpV.copy(pe.pos).sub(cam).addScaledVector(rayV, -WAKE_DEPTH)
+      stroke = tmpV.lengthSq() < WAKE_JUMP * WAKE_JUMP
+    }
+    if (stroke) {
+      tmpV.divideScalar(Math.max(rawDt, 1e-3)).clampLength(0, WAKE_VEL_MAX)
       ptrVel.lerp(tmpV, 1 - Math.exp(-dt / 0.06))
     } else {
       ptrVel.multiplyScalar(Math.exp(-dt / 0.25))
     }
     wake.live = live
-    ptrPrev.copy(pe.pos)
+    wake.x = ip.x
+    wake.y = ip.y
 
     a.hearths.sort((x, y) => x.pos.distanceToSquared(cam) - y.pos.distanceToSquared(cam))
     for (let i = 0; i < a.lightPos.length; i++) {
@@ -389,9 +426,17 @@ export default function ParticleField() {
     }
     mu.uTorch.value = torch ? THREE.MathUtils.smoothstep(pe.w, 0.02, 0.6) : 0
 
+    const drowse =
+      s.compact &&
+      s.phase === 'idle' &&
+      !s.overtureActive &&
+      !pulseLive &&
+      worldEvents.attractor.w < 0.001 &&
+      spin.lengthSq() < 0.0025 &&
+      stillFor() > DROWSE_AFTER
+    const velStep = drowse ? VEL_STEP.drowse : s.quality === 'low' || s.compact ? VEL_STEP.lean : VEL_STEP.full
     velDt.current += dt
-    frame.current++
-    const doVel = frame.current % velEvery === 0
+    const doVel = velDt.current + dt * 0.5 >= velStep
     if (doVel) {
       vu.uTime.value = simTime
       vu.uDt.value = velDt.current
@@ -427,40 +472,27 @@ export default function ParticleField() {
     mu.uPositions.value = a.posVar.renderTargets[a.posIdx].texture
     mu.uVelocities.value = a.velVar.renderTargets[a.velIdx].texture
 
-    if (handoff.dying && dying !== handoff.dying) setDying(handoff.dying)
     if (handoff.dying) {
       const du = handoff.dying.material.uniforms
+      du.uStreak.value = mu.uStreak.value
+      ;(du.uCamVel.value as THREE.Vector3).copy(camVel)
+      du.uTorch.value = mu.uTorch.value
+      for (let i = 0; i < a.lightPos.length; i++) {
+        handoff.dying.lightPos[i].copy(a.lightPos[i])
+        handoff.dying.lightCol[i].copy(a.lightCol[i])
+      }
+      ;(du.uFocus.value as THREE.Vector2).copy(focus)
       du.uOpacity.value = THREE.MathUtils.damp(du.uOpacity.value as number, 0, LAMBDA.settle, dt)
       mu.uOpacity.value = THREE.MathUtils.damp(mu.uOpacity.value as number, BASE_OPACITY, LAMBDA.settle, dt)
       if ((du.uOpacity.value as number) < 0.02) {
         disposeAssets(handoff.dying)
         handoff.dying = null
-        setDying(null)
         mu.uOpacity.value = BASE_OPACITY
       }
     }
   })
 
-  if (!assets) return null
-
-  return (
-    <>
-      <points
-        geometry={assets.geometry}
-        material={assets.material}
-        frustumCulled={false}
-        renderOrder={PARTICLE_ORDER}
-      />
-      {dying && (
-        <points
-          geometry={dying.geometry}
-          material={dying.material}
-          frustumCulled={false}
-          renderOrder={PARTICLE_ORDER}
-        />
-      )}
-    </>
-  )
+  return <group ref={group} />
 }
 
 function seedTextures(pos: THREE.DataTexture, vel: THREE.DataTexture, size: number) {
