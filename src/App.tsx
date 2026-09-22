@@ -14,18 +14,15 @@ import Weave from '@/ui/Weave'
 import BeaconTabStops from '@/ui/BeaconTabStops'
 import Shortcuts from '@/ui/Shortcuts'
 import AudioBridge from '@/audio/AudioBridge'
-import VisibilityPause from '@/perf/VisibilityPause'
-import TextModePark from '@/perf/TextModePark'
+import FrameGovernor from '@/perf/FrameGovernor'
 import BatterySaver from '@/perf/BatterySaver'
 import AdaptiveQuality from '@/perf/AdaptiveQuality'
 import { bootDpr } from '@/perf/dpr'
+import { GL_ATTRIBUTES } from '@/perf/gpuTier'
 import { NO_COMPOSER } from '@/scene/composerPolicy'
 import { useStore } from '@/state/store'
 import { useHashRouting } from '@/state/routing'
 import { useViewport } from '@/ui/useViewport'
-import { isCoarsePointer } from '@/device'
-
-const coarse = isCoarsePointer()
 
 export default function App() {
   useViewport()
@@ -46,15 +43,9 @@ export default function App() {
   return (
     <>
       <Canvas
+        frameloop="never"
         dpr={dpr}
-        gl={{
-          antialias: false,
-          alpha: false,
-          powerPreference: coarse ? 'default' : 'high-performance',
-          stencil: false,
-          depth: true,
-          failIfMajorPerformanceCaveat: false,
-        }}
+        gl={GL_ATTRIBUTES}
         camera={{ fov: 62, near: 0.1, far: 4000, position: [0, 0, 26] }}
         onCreated={({ gl }) => {
           gl.setClearColor(new THREE.Color('#03040a'), 1)
@@ -66,8 +57,7 @@ export default function App() {
           <Preload all />
         </Suspense>
         <AdaptiveQuality dpr={dpr} setDpr={setDpr} />
-        <VisibilityPause />
-        <TextModePark />
+        <FrameGovernor />
       </Canvas>
 
       <Hud />

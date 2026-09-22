@@ -6,6 +6,7 @@ import type { Quality } from '@/state/store'
 import { isCoarsePointer } from '@/device'
 import { BOOT_TIER } from './gpuTier'
 import { DPR_FLOOR, dprCap } from './dpr'
+import { paceBounds, paceSettling } from './pacing'
 
 const coarse = isCoarsePointer()
 
@@ -13,6 +14,7 @@ const TIERS: Quality[] = ['low', 'medium', 'high', 'ultra']
 const MEDIUM = TIERS.indexOf('medium')
 const DPR_STEP = 0.25
 const BOOT_GRACE_MS = 3500
+const PACE_SETTLE_MS = 3000
 const INCLINE_HOLD_MS = 30_000
 const REVERSAL_LOCK = 2
 
@@ -52,7 +54,9 @@ export default function AdaptiveQuality({ dpr, setDpr }: Props) {
   }, [setDpr])
 
   const settling = () =>
-    useStore.getState().overtureActive || performance.now() - bootAt.current < BOOT_GRACE_MS
+    useStore.getState().overtureActive ||
+    performance.now() - bootAt.current < BOOT_GRACE_MS ||
+    paceSettling(PACE_SETTLE_MS)
 
   const stepDown = () => {
     const s = useStore.getState()
@@ -105,6 +109,7 @@ export default function AdaptiveQuality({ dpr, setDpr }: Props) {
 
   return (
     <PerformanceMonitor
+      bounds={paceBounds}
       onDecline={() => {
         if (settling()) return
         declinedAt.current = performance.now()

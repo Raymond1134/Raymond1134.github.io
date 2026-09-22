@@ -4,10 +4,19 @@ import { isCoarsePointer } from '@/device'
 const DISCRETE = /nvidia|geforce|rtx |gtx |radeon (rx|pro)|apple m\d/i
 const SOFTWARE = /swiftshader|llvmpipe|software|basic render/i
 
+export const GL_ATTRIBUTES: WebGLContextAttributes = {
+  antialias: false,
+  alpha: false,
+  powerPreference: isCoarsePointer() ? 'default' : 'high-performance',
+  stencil: false,
+  depth: true,
+  failIfMajorPerformanceCaveat: false,
+}
+
 const probe = () => {
   if (typeof document === 'undefined') return { webgl2: false, renderer: '' }
   try {
-    const gl = document.createElement('canvas').getContext('webgl2')
+    const gl = document.createElement('canvas').getContext('webgl2', GL_ATTRIBUTES)
     if (!gl) return { webgl2: false, renderer: '' }
     const dbg = gl.getExtension('WEBGL_debug_renderer_info')
     const renderer = String(gl.getParameter(dbg ? dbg.UNMASKED_RENDERER_WEBGL : gl.RENDERER) ?? '')

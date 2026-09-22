@@ -116,7 +116,14 @@ export const useStore = create<State>((set, get) => ({
 
   tickTravel: (dt) => {
     const s = get()
-    if (s.phase === 'idle') return
+    if (s.phase === 'idle') {
+      if (s.queuedId) {
+        const q = s.queuedId
+        set({ queuedId: null })
+        get().travelTo(q)
+      }
+      return
+    }
     const t = s.travelClock + dt
 
     if (s.phase === 'fade') {
@@ -125,10 +132,6 @@ export const useStore = create<State>((set, get) => ({
         return
       }
       if (!s.pendingId && t >= FADE.total) {
-        if (s.queuedId) {
-          set({ phase: 'fade', travelClock: 0, pendingId: s.queuedId, queuedId: null, hoveredId: null })
-          return
-        }
         set({ phase: 'idle', travelClock: 0 })
         return
       }

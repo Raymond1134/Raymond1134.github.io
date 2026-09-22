@@ -15,8 +15,10 @@ const HINTS_CLEAR_MS = 10_000
 export default function BatterySaver() {
   const saver = useStore((s) => s.saver)
   const overture = useStore((s) => s.overtureActive)
+  const [seen, setSeen] = useState(overture)
   const [settled, setSettled] = useState(false)
   const [told, setTold] = useState(false)
+  if (overture && !seen) setSeen(true)
   const toast = saver && settled && !told
 
   useEffect(() => {
@@ -49,10 +51,10 @@ export default function BatterySaver() {
   }, [])
 
   useEffect(() => {
-    if (overture) return
+    if (!seen || overture) return
     const id = setTimeout(() => setSettled(true), HINTS_CLEAR_MS)
     return () => clearTimeout(id)
-  }, [overture])
+  }, [seen, overture])
 
   useEffect(() => {
     if (!toast) return
