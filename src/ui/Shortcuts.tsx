@@ -1,4 +1,5 @@
 import { Fragment, useEffect, useRef, useState } from 'react'
+import type { CSSProperties } from 'react'
 import { useStore } from '@/state/store'
 import '@/styles/shortcuts.css'
 
@@ -101,10 +102,10 @@ function Panel({
         <h2 id="shortcuts-title">Finding your way</h2>
 
         <dl className="shortcuts-keys">
-          {rows.map(([key, what]) => (
+          {rows.map(([key, what], i) => (
             <Fragment key={key}>
-              <dt>{key}</dt>
-              <dd>{what}</dd>
+              <dt style={{ '--r': i } as CSSProperties}>{key}</dt>
+              <dd style={{ '--r': i } as CSSProperties}>{what}</dd>
             </Fragment>
           ))}
         </dl>

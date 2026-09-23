@@ -116,8 +116,8 @@ button {
 }
 
 :root[data-q='low'] :is(.hud-chip, .hint, .hud-ghost, .weave-backdrop, .weave-close, .shortcuts-veil, .shortcuts-panel) {
-  backdrop-filter: none;
   -webkit-backdrop-filter: none;
+  backdrop-filter: none;
 }
 :root[data-q='low'] :is(.hint, .hud-ghost) { background-color: rgba(9, 14, 28, 0.8); }
 @media (pointer: fine), (min-width: 601px) and (min-height: 601px) {

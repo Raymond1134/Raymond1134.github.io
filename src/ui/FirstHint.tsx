@@ -1,4 +1,5 @@
 import { Fragment, useEffect, useState } from 'react'
+import type { CSSProperties } from 'react'
 import { useStore } from '@/state/store'
 import { input } from '@/input/input'
 import '@/styles/hint.css'
@@ -93,8 +94,14 @@ export default function FirstHint() {
       <p className="hint-text">
         {segs.map((seg, i) => (
           <Fragment key={seg}>
-            {i > 0 && ' · '}
-            <span className="hint-seg">{seg}</span>
+            {i > 0 && (
+              <span className="hint-sep" style={{ '--i': i } as CSSProperties}>
+                {' · '}
+              </span>
+            )}
+            <span className="hint-seg" style={{ '--i': i } as CSSProperties}>
+              {seg}
+            </span>
           </Fragment>
         ))}
       </p>
