@@ -656,6 +656,8 @@ export default function Beacon({ node, role }: Props) {
       seed + spin.current,
       0.16 * Math.sin(tw * 0.063 + seed * 1.9),
     )
+    crystal.current.visible = adm > 0.01
+    crystal.current.scale.setScalar(0.35 + 0.65 * EASE.hearth(Math.min(1, adm)))
 
     hit.current.scale.setScalar(THREE.MathUtils.clamp(d * TAP_TARGET_FACTOR, 6, 46))
 
