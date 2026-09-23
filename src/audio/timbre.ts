@@ -108,6 +108,7 @@ interface StruckOpts {
   pan?: number
   send?: number
   tilt?: number
+  limit?: number
 }
 
 export const struck = (
@@ -121,6 +122,7 @@ export const struck = (
   opts: StruckOpts = {},
 ) => {
   const table = opts.partials ?? BELL
+  const count = Math.min(table.length, opts.limit ?? table.length)
   const hammer = opts.strike ?? 1
   const tilt = opts.tilt ?? 1
   const pan = Math.max(-0.85, Math.min(0.85, opts.pan ?? 0))
@@ -135,7 +137,7 @@ export const struck = (
     p.connect(wet).connect(send)
   }
 
-  let live = table.length
+  let live = count
   const done = () => {
     live--
     if (live > 0) return
@@ -143,7 +145,8 @@ export const struck = (
     wet?.disconnect()
   }
 
-  for (const pt of table) {
+  for (let i = 0; i < count; i++) {
+    const pt = table[i]
     const f = hz * pt.r
     if (f > c.sampleRate * 0.45) {
       live--
@@ -194,19 +197,26 @@ export const struck = (
   }
 }
 
+const SUB_IMAG = [0, 1.0, 0.355, 0.178]
+const SUB_IMAG_PHONE = [0, 1.0, 0.62, 0.42, 0.22]
+
 let subWave: PeriodicWave | null = null
-const subPeriodic = (c: AudioContext) => {
-  if (!subWave) {
-    subWave = c.createPeriodicWave(
-      new Float32Array([0, 0, 0, 0]),
-      new Float32Array([0, 1.0, 0.355, 0.178]),
-      { disableNormalization: false },
-    )
+let subWavePhone: PeriodicWave | null = null
+
+const periodic = (c: AudioContext, imag: number[]) =>
+  c.createPeriodicWave(new Float32Array(imag.length), new Float32Array(imag), { disableNormalization: false })
+
+const subPeriodic = (c: AudioContext, phone: boolean) => {
+  if (phone) {
+    if (!subWavePhone) subWavePhone = periodic(c, SUB_IMAG_PHONE)
+    return subWavePhone
   }
+  if (!subWave) subWave = periodic(c, SUB_IMAG)
   return subWave
 }
 export const forgetWaves = () => {
   subWave = null
+  subWavePhone = null
 }
 
 export const sub = (
@@ -217,9 +227,10 @@ export const sub = (
   peak: number,
   hold: number,
   ringDur: number,
+  phone = false,
 ) => {
   const o = c.createOscillator()
-  o.setPeriodicWave(subPeriodic(c))
+  o.setPeriodicWave(subPeriodic(c, phone))
   o.frequency.value = hz
   const g = c.createGain()
   const atk = Math.max(0.045, 3 / hz)

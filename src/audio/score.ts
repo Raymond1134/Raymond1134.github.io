@@ -2,9 +2,10 @@ import { Vector3 } from 'three'
 import { BREATH_HZ, breathState } from '@/scene/breath'
 import { worldEvents } from '@/scene/worldEvents'
 import { TRAVEL_LANDING, useStore } from '@/state/store'
+import type { Quality } from '@/state/store'
 import {
   engine, mix, BED, MASTER, later, clearTimer, noiseBuffer, estClock, audioEnabledNow, audioWanted,
-  outputDelay,
+  outputDelay, bloomRoom,
 } from './audio'
 import { struck, sub, brownStereo, BELL, BELL_MAJOR, GLASS } from './timbre'
 import { noteOf, arrivalChord, tonesOf, branchOf, inKey, majorTierce, HEXATONIC } from './harmony'
@@ -25,27 +26,48 @@ const timeToExhale = (t: number) => {
 
 const FAR_D = 220
 
+const BELL_KEEP: Record<Quality, number> = { low: 5, medium: 6, high: 9, ultra: 9 }
+const GLASS_KEEP: Record<Quality, number> = { low: 4, medium: 5, high: 5, ultra: 5 }
+const SING_OUT = 0.08
+
 const key = (hz: number) => inKey(hz, engine?.tide.isMajor() ?? false)
+const lean = () => mix.tier === 'low' || mix.tier === 'medium'
 
 const chime = (when: number, hz: number, peak: number, dur: number, pan = 0, far = 0.2) => {
   const e = engine
-  if (!e) return
-  struck(e.ctx, e.chimeBus, e.room.send, when, key(hz), peak * (1 - 0.3 * far), dur, {
+  if (!e) return 0
+  const heard = peak * (1 - 0.3 * far)
+  struck(e.ctx, e.chimeBus, e.room.send, when, key(hz), heard, dur, {
     partials: GLASS,
-    strike: 0.25,
+    strike: lean() ? 0 : 0.25,
     pan,
     send: 0.04 + 0.42 * far,
     tilt: 1 - 0.4 * far,
+    limit: GLASS_KEEP[mix.tier],
   })
+  return heard
 }
 
-const bloomRoom = (when: number, peak: number, decay: number) => {
+const onsetAt = (c: AudioContext, when: number) => {
+  const rough = performance.now() + (when - c.currentTime + outputDelay(c)) * 1000
+  if (typeof c.getOutputTimestamp !== 'function') return rough
+  const ts = c.getOutputTimestamp()
+  if (!ts.contextTime || !ts.performanceTime) return rough
+  const precise = ts.performanceTime + (when - ts.contextTime) * 1000
+  return Math.abs(precise - rough) < 400 ? precise : rough
+}
+
+const sing = (id: string, when: number, peak: number) => {
   const e = engine
-  if (!e) return
-  const g = e.room.send.gain
-  g.cancelScheduledValues(when)
-  g.setTargetAtTime(peak, when, 0.09)
-  g.setTargetAtTime(1, when + 0.45, decay)
+  if (!e || peak <= 0) return
+  const at = onsetAt(e.ctx, when)
+  later(() => {
+    if (engine !== e || !audioEnabledNow() || e.ctx.state !== 'running') return
+    const s = worldEvents.sing
+    s.id = id
+    s.at = at
+    s.mag = Math.min(1, peak / SING_OUT)
+  }, Math.max(0, at - performance.now()))
 }
 
 const bell = (
@@ -64,6 +86,7 @@ const bell = (
     strike: 1,
     pan,
     send: 0.35,
+    limit: BELL_KEEP[mix.tier],
   })
 }
 
@@ -71,7 +94,7 @@ const thump = (when: number, hz: number, peak: number, hold: number, ring: numbe
   const e = engine
   if (!e) return
   const f = key(Math.max(30, hz))
-  sub(e.ctx, e.subBus, when, f, peak, hold, ring)
+  sub(e.ctx, e.subBus, when, f, peak, hold, ring, mix.phone)
   if (peak >= 0.05) {
     const d = e.bedDuck.gain
     d.cancelScheduledValues(when)
@@ -85,21 +108,24 @@ const panOf = (id: string) => placement.get(id)?.pan ?? 0
 const gainAt = (id: string) => Math.max(0.3, placement.get(id)?.g ?? 0.5)
 const farOf = (id: string) => Math.min(1, (placement.get(id)?.d ?? 60) / FAR_D)
 
-const pickSource = (currentId: string): { hz: number; pan: number; far: number } => {
+const pickSource = (currentId: string): { id: string | null; hz: number; pan: number; far: number } => {
   if (Math.random() < 0.65) {
     const branch = branchOf(currentId)
     const hub = graph.nodes.get(branch)
     const familyIds = [branch, ...(hub?.children ?? [])]
     const id = familyIds[(Math.random() * familyIds.length) | 0]
     const oct = [0.5, 1, 2][(Math.random() * 3) | 0]
-    return { hz: Math.min(1318.51, noteOf(id).hover * oct), pan: panOf(id), far: farOf(id) }
+    return { id, hz: Math.min(1318.51, noteOf(id).hover * oct), pan: panOf(id), far: farOf(id) }
   }
   return {
+    id: null,
     hz: HEXATONIC[(Math.random() * HEXATONIC.length) | 0],
     pan: Math.random() * 1.2 - 0.6,
     far: 0.2 + Math.random() * 0.6,
   }
 }
+
+const nextGap = () => (7 + Math.random() * 9) * mix.chimeRate
 
 const nextChime = (delayS: number) => {
   chimeTimer = later(
@@ -107,20 +133,15 @@ const nextChime = (delayS: number) => {
       const e = engine
       if (!e || !audioEnabledNow()) return
       if (e.ctx.state !== 'running') {
-        nextChime(7 + Math.random() * 9)
+        nextChime(nextGap())
         return
       }
       const src = pickSource(currentIdHint || graph.rootId)
-      const exhale = timeToExhale(estClock())
-      chime(
-        e.ctx.currentTime + exhale + 0.15,
-        src.hz,
-        0.05 + Math.random() * 0.05,
-        3.4 + Math.random() * 2.6,
-        src.pan,
-        src.far,
-      )
-      nextChime(7 + Math.random() * 9)
+      const when = e.ctx.currentTime + timeToExhale(estClock()) + 0.15
+      const peak = (0.05 + Math.random() * 0.05) * mix.chimeSoft
+      const heard = chime(when, src.hz, peak, 3.4 + Math.random() * 2.6, src.pan, src.far)
+      if (src.id) sing(src.id, when, heard)
+      nextChime(nextGap())
     },
     delayS * 1000,
   )
@@ -143,7 +164,7 @@ export const startChimes = () => {
     const src = pickSource(currentIdHint || graph.rootId)
     chime(e.ctx.currentTime + 0.35, src.hz, 0.06, 4.2, src.pan, src.far)
   }
-  nextChime(6 + Math.random() * 5)
+  nextChime((6 + Math.random() * 5) * mix.chimeRate)
 }
 
 let reprised = false
@@ -192,7 +213,7 @@ export const playHover = (id: string) => {
   if (id === mix.lastPingId && t < mix.lastPing + 0.9) return
   mix.lastPing = t
   mix.lastPingId = id
-  chime(t + 0.02, noteOf(id).hover, 0.035, 0.5, panOf(id), farOf(id))
+  sing(id, t + 0.02, chime(t + 0.02, noteOf(id).hover, 0.035, 0.5, panOf(id), farOf(id)))
 }
 
 const arrive = (destId: string, when: number, peakScale = 1) => {
@@ -208,8 +229,11 @@ const arrive = (destId: string, when: number, peakScale = 1) => {
   const chord = arrivalChord(destId)
   bell(when, root, 0.30 * peakScale, 5.2, panOf(destId))
   const peaks = [0.055, 0.042, 0.032]
+  const own = chord.length - 1
   chord.forEach((hz, i) => {
-    chime(when + 0.07 + i * 0.07, hz, (peaks[i] ?? 0.03) * peakScale, 4 + i, 0, 0.05)
+    const at = when + 0.07 + i * 0.07
+    const heard = chime(at, hz, (peaks[i] ?? 0.03) * peakScale, 4 + i, 0, 0.05)
+    if (i === own) sing(destId, at, heard)
   })
   bloomRoom(when, 1 + 0.45 * peakScale, 1.2)
 }
@@ -512,18 +536,21 @@ export const playDeepBreath = () => {
   if (!e || !audioEnabledNow() || e.ctx.state !== 'running') return
   const t = e.ctx.currentTime
   const period = 1 / BREATH_HZ
-  const o = e.ctx.createOscillator()
-  o.frequency.value = 55
-  const g = e.ctx.createGain()
-  g.gain.setValueAtTime(0.0001, t)
-  g.gain.linearRampToValueAtTime(0.02, t + period * 0.4)
-  g.gain.linearRampToValueAtTime(0.0001, t + period)
-  o.connect(g).connect(e.master)
-  o.start(t)
-  o.stop(t + period + 0.1)
-  o.onended = () => {
-    o.disconnect()
-    g.disconnect()
+  const layers: [number, number][] = mix.phone ? [[55, 0.02], [110, 0.012]] : [[55, 0.02]]
+  for (const [hz, peak] of layers) {
+    const o = e.ctx.createOscillator()
+    o.frequency.value = hz
+    const g = e.ctx.createGain()
+    g.gain.setValueAtTime(0.0001, t)
+    g.gain.linearRampToValueAtTime(peak, t + period * 0.4)
+    g.gain.linearRampToValueAtTime(0.0001, t + period)
+    o.connect(g).connect(e.master)
+    o.start(t)
+    o.stop(t + period + 0.1)
+    o.onended = () => {
+      o.disconnect()
+      g.disconnect()
+    }
   }
 }
 
@@ -547,7 +574,7 @@ export const playSwellEvent = (dur: number) => {
   f.cancelScheduledValues(t)
   f.setValueAtTime(f.value, t)
   f.linearRampToValueAtTime(520, t + dur * 0.45)
-  f.linearRampToValueAtTime(1150, t + dur + 1.2)
+  f.linearRampToValueAtTime(mix.lpBase, t + dur + 1.2)
   thump(t + dur * 0.2, 41.2, 0.04, dur * 0.4, 2)
 }
 

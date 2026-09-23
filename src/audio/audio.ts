@@ -2,7 +2,7 @@ import * as THREE from 'three'
 import { BREATH_HZ, breath } from '@/scene/breath'
 import { useStore } from '@/state/store'
 import type { Quality } from '@/state/store'
-import { createRoom, RT60_TIER } from './room'
+import { createRoom, forgetRooms, RT60_TIER } from './room'
 import type { Room } from './room'
 import { createVoices } from './voices'
 import type { VoicePool } from './voices'
@@ -21,7 +21,27 @@ export const BED = 0.24
 const FADE_IN = 1.2
 const FADE_OUT = 0.6
 
+const LP_WORLD = 1150
+const LP_PHONE = 1400
+const AMBIENT_MS = 250
+
 const VOICE_BUDGET: Record<Quality, number> = { low: 2, medium: 2, high: 3, ultra: 4 }
+
+export type AudioSpace = 'world' | 'map' | 'text'
+
+interface SpaceShape {
+  lp: number
+  room: number
+  dry: number
+  rate: number
+  soft: number
+}
+
+const SPACES: Record<AudioSpace, SpaceShape> = {
+  world: { lp: 1, room: 1, dry: 1, rate: 1, soft: 1 },
+  map: { lp: 0.68, room: 1.7, dry: 0.7, rate: 1, soft: 0.9 },
+  text: { lp: 0.8, room: 1.2, dry: 0.55, rate: 1.6, soft: 0.7 },
+}
 
 type Timer = ReturnType<typeof setTimeout>
 
@@ -54,6 +74,11 @@ export const mix = {
   airBusyUntil: 0,
   clock: { t: 0, at: typeof performance !== 'undefined' ? performance.now() : 0 },
   tier: 'high' as Quality,
+  phone: false,
+  lpBase: LP_WORLD,
+  roomBase: 1,
+  chimeRate: 1,
+  chimeSoft: 1,
 }
 
 export const estClock = () => mix.clock.t + (performance.now() - mix.clock.at) / 1000
@@ -67,6 +92,8 @@ let hidden = false
 let suspendTimer: Timer | null = null
 let startSeq = 0
 let resumeArmed = false
+let space: AudioSpace = 'world'
+let ambientTimer: ReturnType<typeof setInterval> | null = null
 
 const timers = new Set<Timer>()
 
@@ -144,8 +171,10 @@ const build = (): Engine => {
   }
   const boot = useStore.getState()
   const quality = boot.quality
-  const compact = boot.compact
+  const phone = boot.compact
   mix.tier = quality
+  mix.phone = phone
+  mix.lpBase = (phone ? LP_PHONE : LP_WORLD) * SPACES[space].lp
 
   const limiter = c.createDynamicsCompressor()
   limiter.threshold.value = -3
@@ -186,16 +215,16 @@ const build = (): Engine => {
   bedMud.type = 'peaking'
   bedMud.frequency.value = 240
   bedMud.Q.value = 1.1
-  bedMud.gain.value = -4
+  bedMud.gain.value = phone ? -1.5 : -4
   bedMud.connect(bedDuck)
 
   const lp = c.createBiquadFilter()
   lp.type = 'lowpass'
-  lp.frequency.value = 1150
+  lp.frequency.value = mix.lpBase
   lp.Q.value = 0.4
   lp.connect(bedMud)
 
-  const tide = createTide(c, lp, () => !picardyReady())
+  const tide = createTide(c, lp, () => !picardyReady(), phone)
 
   const bus = c.createGain()
   bus.connect(out)
@@ -246,11 +275,11 @@ const build = (): Engine => {
   subBus.gain.value = 1
   const subHp = c.createBiquadFilter()
   subHp.type = 'highpass'
-  subHp.frequency.value = compact ? 45 : 28
+  subHp.frequency.value = phone ? 45 : 28
   subHp.Q.value = 0.7
   const subLp = c.createBiquadFilter()
   subLp.type = 'lowpass'
-  subLp.frequency.value = 140
+  subLp.frequency.value = phone ? 360 : 140
   subLp.Q.value = 0.7
   subBus.connect(subHp).connect(subLp).connect(glue)
   const subSend = c.createGain()
@@ -289,7 +318,97 @@ const build = (): Engine => {
     ctx: c, master: out, bedGain: bed, bedLp: lp, bedDuck, chimeBus: bus, room, voices,
     moveGain, moveBp, strikeBus, strikeSend, subBus, airGain, tide,
   }
+  applySpace(true)
+  syncAmbient()
   return engine
+}
+
+const bloom = { at: -1, peak: 1, decay: 1 }
+
+const swell = (g: AudioParam) => {
+  g.cancelScheduledValues(bloom.at)
+  g.setTargetAtTime(bloom.peak * mix.roomBase, bloom.at, 0.09)
+  g.setTargetAtTime(mix.roomBase, bloom.at + 0.45, bloom.decay)
+}
+
+export const bloomRoom = (when: number, peak: number, decay: number) => {
+  const e = engine
+  if (!e) return
+  bloom.at = when
+  bloom.peak = peak
+  bloom.decay = decay
+  swell(e.room.send.gain)
+}
+
+const applySpace = (instant: boolean) => {
+  const sp = SPACES[space]
+  mix.lpBase = (mix.phone ? LP_PHONE : LP_WORLD) * sp.lp
+  mix.roomBase = sp.room
+  mix.chimeRate = sp.rate
+  mix.chimeSoft = sp.soft
+  const e = engine
+  if (!e) return
+  const now = e.ctx.currentTime
+  const g = e.room.send.gain
+  g.cancelScheduledValues(now)
+  g.setValueAtTime(instant ? sp.room : g.value, now)
+  if (!instant) g.setTargetAtTime(sp.room, now, 0.6)
+  if (bloom.at > now) swell(g)
+  e.voices.setDry(sp.dry)
+}
+
+const breathe = (e: Engine, t: number, now: number) => {
+  const b = breath(t)
+  const drift = Math.sin(2 * Math.PI * BREATH_HZ * 0.37 * t)
+  const at = performance.now()
+  if (at > mix.bedLpBusyUntil) {
+    const sway = (180 * (2 * b - 1) + 120 * drift) / LP_WORLD
+    e.bedLp.frequency.setTargetAtTime(mix.lpBase * (1 + sway), now, 0.15)
+  }
+  if (at > mix.bedBusyUntil) {
+    e.bedGain.gain.setTargetAtTime(BED + 0.05 * (2 * b - 1), now, 0.15)
+  }
+  e.tide.update(now)
+  if (at > mix.airBusyUntil) {
+    const airTarget = Math.max(
+      0.006,
+      Math.min(0.075, 0.014 * (0.78 + 0.44 * b) * (1 + 1.9 * worldEvents.grade.caustic)),
+    )
+    const airRising = airTarget > (e.airGain.gain.value as number)
+    e.airGain.gain.setTargetAtTime(airTarget, now, airRising ? 0.25 : 0.55)
+  }
+  return b
+}
+
+const ambientTick = () => {
+  const e = engine
+  if (!e || !enabled || hidden || e.ctx.state !== 'running') return
+  if (performance.now() - mix.clock.at < AMBIENT_MS * 1.5) return
+  const now = e.ctx.currentTime
+  breathe(e, estClock(), now)
+  e.moveGain.gain.setTargetAtTime(0, now, 0.5)
+  e.voices.relax()
+}
+
+const syncAmbient = () => {
+  const want = space === 'text' && engine !== null
+  if (want && !ambientTimer) ambientTimer = setInterval(ambientTick, AMBIENT_MS)
+  if (!want && ambientTimer) {
+    clearInterval(ambientTimer)
+    ambientTimer = null
+  }
+}
+
+export const setSpace = (next: AudioSpace) => {
+  if (next === space) return
+  space = next
+  applySpace(false)
+  syncAmbient()
+}
+
+const whenIdle = (fn: () => void) => {
+  if (typeof requestIdleCallback === 'function') requestIdleCallback(fn, { timeout: 1200 })
+  else later(fn, 60)
 }
 
 const fade = (to: number, dur: number) => {
@@ -394,16 +513,7 @@ export const audioFrame = (t: number, camera: THREE.Camera) => {
   const now = e.ctx.currentTime
   const s = useStore.getState()
 
-  const b = breath(t)
-  const drift = Math.sin(2 * Math.PI * BREATH_HZ * 0.37 * t)
-  if (performance.now() > mix.bedLpBusyUntil) {
-    e.bedLp.frequency.setTargetAtTime(1150 + 180 * (2 * b - 1) + 120 * drift, now, 0.15)
-  }
-  if (performance.now() > mix.bedBusyUntil) {
-    e.bedGain.gain.setTargetAtTime(BED + 0.05 * (2 * b - 1), now, 0.15)
-  }
-
-  e.tide.update(now)
+  const b = breathe(e, t, now)
 
   if (!camInit) {
     prevCam.copy(camera.position)
@@ -421,22 +531,16 @@ export const audioFrame = (t: number, camera: THREE.Camera) => {
   e.moveGain.gain.setTargetAtTime(gTarget, now, rising ? 0.15 : 0.5)
   e.moveBp.frequency.setTargetAtTime(350 + 550 * m, now, 0.2)
 
-  if (performance.now() > mix.airBusyUntil) {
-    const airTarget = Math.max(
-      0.006,
-      Math.min(0.075, 0.014 * (0.78 + 0.44 * b) * (1 + 1.9 * worldEvents.grade.caustic)),
-    )
-    const airRising = airTarget > (e.airGain.gain.value as number)
-    e.airGain.gain.setTargetAtTime(airTarget, now, airRising ? 0.25 : 0.55)
-  }
-
   const force = s.phase !== 'idle' ? (s.pendingId ?? s.currentId) : s.hoveredId
   e.voices.update(camera, s.currentId, force, b, teleport ? 0 : dt, e.tide.isMajor())
 
   if (s.quality !== mix.tier) {
-    mix.tier = s.quality
-    e.room.setRT60(RT60_TIER[s.quality])
-    e.voices.setBudget(VOICE_BUDGET[s.quality])
+    const tier = s.quality
+    mix.tier = tier
+    e.voices.setBudget(VOICE_BUDGET[tier])
+    whenIdle(() => {
+      if (engine === e && mix.tier === tier) e.room.setRT60(RT60_TIER[tier])
+    })
   }
 }
 
@@ -447,6 +551,8 @@ export const disposeAudio = () => {
   startSeq++
   disarmResume()
   resetScore()
+  if (ambientTimer) clearInterval(ambientTimer)
+  ambientTimer = null
 
   for (const n of nodes) n.disconnect()
   nodes = []
@@ -458,10 +564,12 @@ export const disposeAudio = () => {
   airSrc = null
   forgetNoise()
   forgetWaves()
+  forgetRooms()
 
   const e = engine
   engine = null
   camInit = false
+  bloom.at = -1
   mix.passageUntil = 0
   mix.lastPing = 0
   mix.bedBusyUntil = 0

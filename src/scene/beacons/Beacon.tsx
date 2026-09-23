@@ -520,6 +520,13 @@ export default function Beacon({ node, role }: Props) {
       if (sg >= 0 && sg < 0.6)
         ack *= 1 + 0.2 * Math.sin((sg / 0.6) * Math.PI) * (0.7 + 0.3 * Math.sin(sg * Math.PI * 10))
     }
+    if (worldEvents.sing.id === node.id) {
+      const ss = (now - worldEvents.sing.at) / 1000
+      if (ss >= 0 && ss < 1.6) {
+        const lift = (st.reducedMotion ? 0.25 : 0.5) * worldEvents.sing.mag
+        ack *= 1 + lift * Math.min(1, ss * 40) * Math.exp(-ss * 2.5)
+      }
+    }
 
     const isGoal = st.phase !== 'idle' && (st.pendingId ?? st.currentId) === node.id
     const landed =

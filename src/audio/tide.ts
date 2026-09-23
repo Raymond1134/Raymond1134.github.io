@@ -19,6 +19,7 @@ const STATIONS: Station[] = [
 const MAJOR_IDX = 6
 
 const GAINS = [0.16, 0.12, 0.11, 0.07, 0.035, 0.025]
+const GAINS_PHONE = [0.11, 0.09, 0.12, 0.10, 0.055, 0.04]
 const CENTS = [-7, 6, -5, 4, -3, 7]
 const TYPES: OscillatorType[] = ['sine', 'triangle', 'sine', 'sine', 'sine', 'sine']
 const PAN = [-0.12, 0.12, -0.38, 0.38, -0.62, 0.62]
@@ -79,8 +80,13 @@ export interface TideCtl {
   dispose: () => void
 }
 
-export const createTide = (c: AudioContext, dest: AudioNode, earned: () => boolean): TideCtl => {
-  const voiced = GAINS.map((g) => g * PAN_LAW)
+export const createTide = (
+  c: AudioContext,
+  dest: AudioNode,
+  earned: () => boolean,
+  phone: boolean,
+): TideCtl => {
+  const voiced = (phone ? GAINS_PHONE : GAINS).map((g) => g * PAN_LAW)
   const lfos = LFO_HZ.map((hz) => {
     const o = c.createOscillator()
     o.frequency.value = hz

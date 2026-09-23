@@ -26,7 +26,22 @@ interface Voice {
   bend: number
 }
 
-export const placement = new Map<string, { pan: number; g: number; d: number; behind: boolean }>()
+interface Place {
+  pan: number
+  g: number
+  d: number
+  behind: boolean
+}
+
+interface Tracked extends Place {
+  id: string
+  at: Vector3
+}
+
+export const placement = new Map<string, Place>()
+
+const tracked: Tracked[] = []
+const nearest = (a: Tracked, b: Tracked) => a.d - b.d
 
 const inv = new Matrix4()
 const v = new Vector3()
@@ -52,6 +67,8 @@ export interface VoicePool {
     major: boolean,
   ) => void
   setBudget: (n: number) => void
+  setDry: (g: number) => void
+  relax: () => void
   nodes: AudioNode[]
   dispose: () => void
 }
@@ -59,7 +76,31 @@ export interface VoicePool {
 export function createVoices(ctx: AudioContext, out: AudioNode, roomSend: AudioNode, budget: number): VoicePool {
   const voices: Voice[] = []
   const nodes: AudioNode[] = []
+  const want = new Set<string>()
+  const desired: string[] = []
   let cap = budget
+  let dryLevel = 1
+
+  const held = (id: string) => {
+    for (let i = 0; i < voices.length; i++) if (voices[i].beaconId === id) return true
+    return false
+  }
+
+  const farthestLoose = () => {
+    let worst = -1
+    for (let i = 0; i < voices.length; i++) {
+      const id = voices[i].beaconId
+      if (!id || want.has(id)) continue
+      const d = placement.get(id)?.d ?? 1e9
+      if (d > worst) worst = d
+    }
+    return worst < 0 ? 1e9 : worst
+  }
+
+  const claim = (id: string) => {
+    desired.push(id)
+    want.add(id)
+  }
 
   const makeVoice = (): Voice => {
     const oscA = ctx.createOscillator()
@@ -75,7 +116,7 @@ export function createVoices(ctx: AudioContext, out: AudioNode, roomSend: AudioN
     lp.frequency.value = 800
     const pan = ctx.createStereoPanner()
     const dry = ctx.createGain()
-    dry.gain.value = 1
+    dry.gain.value = dryLevel
     const send = ctx.createGain()
     send.gain.value = 0.1
     oscA.connect(gain)
@@ -107,42 +148,52 @@ export function createVoices(ctx: AudioContext, out: AudioNode, roomSend: AudioN
     camera.updateMatrixWorld()
     inv.copy(camera.matrixWorld).invert()
 
-    placement.clear()
-    for (const node of graph.nodes.values()) {
-      const p = locate(node.worldPosition)
-      placement.set(node.id, { pan: p.pan, g: p.g, d: p.d, behind: p.behind })
-    }
-
-    const desired: string[] = [currentId]
-    if (forceId && forceId !== currentId) desired.push(forceId)
-    const rest = [...placement.entries()]
-      .filter(([id]) => !desired.includes(id))
-      .sort((a, b) => a[1].d - b[1].d)
-    for (const [id, p] of rest) {
-      if (desired.length >= cap) break
-      const incumbent = voices.find((vc) => vc.beaconId === id)
-      if (incumbent) {
-        desired.push(id)
-        continue
+    if (tracked.length !== graph.nodes.size) {
+      tracked.length = 0
+      placement.clear()
+      for (const node of graph.nodes.values()) {
+        const rec: Tracked = { id: node.id, at: node.worldPosition, pan: 0, g: 0, d: 0, behind: false }
+        tracked.push(rec)
+        placement.set(node.id, rec)
       }
-      const active = voices.filter((vc) => vc.beaconId && !desired.includes(vc.beaconId))
-      const worst = active.sort(
-        (a, b) => (placement.get(b.beaconId!)?.d ?? 1e9) - (placement.get(a.beaconId!)?.d ?? 1e9),
-      )[0]
-      const worstD = worst ? placement.get(worst.beaconId!)?.d ?? 1e9 : 1e9
-      if (p.d < worstD * 0.85) desired.push(id)
+    }
+    for (let i = 0; i < tracked.length; i++) {
+      const rec = tracked[i]
+      const p = locate(rec.at)
+      rec.pan = p.pan
+      rec.g = p.g
+      rec.d = p.d
+      rec.behind = p.behind
+    }
+    tracked.sort(nearest)
+
+    const live = Math.min(cap, voices.length)
+    desired.length = 0
+    want.clear()
+    claim(currentId)
+    if (forceId && forceId !== currentId) claim(forceId)
+    for (let i = 0; i < tracked.length && desired.length < cap; i++) {
+      const p = tracked[i]
+      if (want.has(p.id)) continue
+      if (held(p.id) || p.d < farthestLoose() * 0.85) claim(p.id)
     }
 
-    for (const vc of voices.slice(0, cap)) {
-      if (vc.beaconId && !desired.includes(vc.beaconId)) {
+    for (let i = 0; i < live; i++) {
+      const vc = voices[i]
+      if (vc.beaconId && !want.has(vc.beaconId)) {
         vc.gain.gain.setTargetAtTime(0, t, 0.23)
         vc.level = 0
         if ((vc.gain.gain.value as number) < 0.002) vc.beaconId = null
       }
     }
-    for (const id of desired) {
-      if (voices.some((vc) => vc.beaconId === id)) continue
-      const free = voices.slice(0, cap).find((vc) => vc.beaconId === null && (vc.gain.gain.value as number) < 0.003)
+    for (let k = 0; k < desired.length; k++) {
+      const id = desired[k]
+      if (held(id)) continue
+      let free: Voice | null = null
+      for (let i = 0; i < live && !free; i++) {
+        const vc = voices[i]
+        if (vc.beaconId === null && (vc.gain.gain.value as number) < 0.003) free = vc
+      }
       if (!free) continue
       free.drone = noteOf(id).drone
       free.hz = inKey(free.drone, major)
@@ -153,7 +204,8 @@ export function createVoices(ctx: AudioContext, out: AudioNode, roomSend: AudioN
       free.prevD = -1
     }
 
-    for (const vc of voices.slice(0, cap)) {
+    for (let i = 0; i < live; i++) {
+      const vc = voices[i]
       if (!vc.beaconId) continue
       const p = placement.get(vc.beaconId)
       if (!p) continue
@@ -198,6 +250,21 @@ export function createVoices(ctx: AudioContext, out: AudioNode, roomSend: AudioN
         voices[i].level = 0
       }
       while (voices.length < cap) makeVoice()
+    },
+    setDry: (g) => {
+      dryLevel = g
+      const t = ctx.currentTime
+      for (const vc of voices) vc.dry.gain.setTargetAtTime(g, t, 0.6)
+    },
+    relax: () => {
+      const t = ctx.currentTime
+      for (const vc of voices) {
+        vc.prevD = -1
+        if (vc.bend === 0) continue
+        vc.bend = 0
+        vc.oscA.detune.setTargetAtTime(-4, t, 0.3)
+        vc.oscB.detune.setTargetAtTime(4, t, 0.3)
+      }
     },
     nodes,
     dispose: () => {

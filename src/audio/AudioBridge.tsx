@@ -6,9 +6,11 @@ import {
   restoreAudioPreference,
   setAudioEnabled,
   setPageHidden,
+  setSpace,
   tryEagerStart,
   unlockAudio,
 } from '@/audio/audio'
+import type { AudioSpace } from '@/audio/audio'
 import {
   approachLanding,
   condensedArrival,
@@ -25,6 +27,9 @@ export default function AudioBridge() {
     if (restoreAudioPreference()) useStore.setState({ audioEnabled: true })
     setCurrentIdHint(useStore.getState().currentId)
     setPageHidden(document.hidden)
+    const spaceOf = (s: { textMode: boolean; mapOpen: boolean }): AudioSpace =>
+      s.textMode ? 'text' : s.mapOpen ? 'map' : 'world'
+    setSpace(spaceOf(useStore.getState()))
     tryEagerStart()
 
     const unlock = () => {
@@ -48,6 +53,7 @@ export default function AudioBridge() {
     const gliding = (p: string) => p === 'turn' || p === 'flight'
 
     const unsub = useStore.subscribe((s, prev) => {
+      if (s.textMode !== prev.textMode || s.mapOpen !== prev.mapOpen) setSpace(spaceOf(s))
       if (s.audioEnabled !== prev.audioEnabled) setAudioEnabled(s.audioEnabled)
       if (s.currentId !== prev.currentId) setCurrentIdHint(s.currentId)
       if (prev.textMode && !s.textMode) repayIgnition()

@@ -32,6 +32,7 @@ export const worldEvents = {
   ember: { id: null as string | null, gain: 0 },
 
   soundGlintAt: -1e9,
+  sing: { id: null as string | null, at: -1e9, mag: 0 },
   homePulseAt: -1e9,
 
   grade: { exposure: 1, ignite: 1, glare: 1, shaft: 1, vault: 1, caustic: 0 },

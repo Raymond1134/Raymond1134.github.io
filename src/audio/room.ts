@@ -5,6 +5,12 @@ const ER_G = [0.5, -0.38, 0.31, -0.24, 0.19, -0.15, 0.11]
 
 export const RT60_TIER = { low: 1.4, medium: 2.0, high: 2.6, ultra: 3.2 } as const
 
+const TONE_STRIDE = 32
+
+const irCache = new Map<string, AudioBuffer>()
+
+export const forgetRooms = () => irCache.clear()
+
 function mulberry32(seed: number) {
   let a = seed >>> 0
   return () => {
@@ -17,6 +23,9 @@ function mulberry32(seed: number) {
 
 function generateRoomIR(ctx: BaseAudioContext, rt60: number): AudioBuffer {
   const sr = ctx.sampleRate
+  const key = `${sr}:${rt60}`
+  const hit = irCache.get(key)
+  if (hit) return hit
   const tail = rt60 * 1.15
   const n = Math.ceil(sr * (PREDELAY + tail))
   const buf = ctx.createBuffer(2, n, sr)
@@ -33,13 +42,20 @@ function generateRoomIR(ctx: BaseAudioContext, rt60: number): AudioBuffer {
       if (at < n) d[at] += ER_G[i]
     }
 
+    const decay = Math.exp(-6.91 / (rt60 * sr))
+    const darken = Math.exp((-3.0 * TONE_STRIDE) / (rt60 * sr))
     let lp = 0
+    let env = 1
+    let tone = 4500
+    let a = 0
     for (let i = pre; i < n; i++) {
-      const t = (i - pre) / sr
-      const fc = 700 + 4500 * Math.exp((-3.0 * t) / rt60)
-      const a = 1 - Math.exp((-2 * Math.PI * fc) / sr)
+      if ((i - pre) % TONE_STRIDE === 0) {
+        a = 1 - Math.exp((-2 * Math.PI * (700 + tone)) / sr)
+        tone *= darken
+      }
       lp += a * (rand() * 2 - 1 - lp)
-      d[i] += lp * Math.exp((-6.91 * t) / rt60)
+      d[i] += lp * env
+      env *= decay
     }
   }
 
@@ -54,6 +70,7 @@ function generateRoomIR(ctx: BaseAudioContext, rt60: number): AudioBuffer {
     for (let i = 0; i < n; i++) d[i] *= scale
   }
 
+  irCache.set(key, buf)
   return buf
 }
 
@@ -71,6 +88,7 @@ export function createRoom(ctx: AudioContext, out: AudioNode, rt60: number): Roo
 
   let convolver: ConvolverNode | null = null
   let ret: GainNode | null = null
+  let current = rt60
 
   const attach = (rt: number, fadeIn: boolean) => {
     const c = ctx.createConvolver()
@@ -93,6 +111,8 @@ export function createRoom(ctx: AudioContext, out: AudioNode, rt60: number): Roo
     send,
     nodes,
     setRT60: (rt) => {
+      if (rt === current) return
+      current = rt
       const oldC = convolver
       const oldR = ret
       if (oldC && oldR) {
