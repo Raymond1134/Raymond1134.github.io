@@ -4,6 +4,7 @@
     "role": "Computer Science Student | UWaterloo",
     "description": "Computer science student at the University of Waterloo. I like figuring out how things work by building them myself.",
     "url": "https://raymond1134.github.io",
+    "ogImage": "/og.jpg",
 
     "themeColorCold": "#2d6fd8",
     "themeColorMid": "#8a5ce6",
