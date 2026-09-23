@@ -16,6 +16,7 @@ import { BEACON_DEFAULT_COLOR } from './beacons/palette'
 const DITHER_K = 1.1
 
 const FALLOFF = 0.006
+const GOAL_SWELL = NO_COMPOSER ? 0.6 : 1.6
 
 const TIER = {
   low: { oct: 0, warp: 0, lights: 2, bend: 0 },
@@ -153,7 +154,7 @@ export default function AetherDepths() {
     for (const l of LIGHTS) {
       const dist = cam.position.distanceTo(l.pos)
       l.dir.copy(l.pos).sub(cam.position).normalize()
-      let target = l.id === goalId ? 1.3 + 1.6 * swellTight(travelProgress(s)) : 1
+      let target = l.id === goalId ? 1.3 + GOAL_SWELL * swellTight(travelProgress(s)) : 1
       if (l.id === worldEvents.flare.id) target *= 1 + 0.5 * worldEvents.flare.gain
       l.own += (target - l.own) * k
       l.w = LUM.aureole * Math.exp(-dist * FALLOFF) * l.own

@@ -23,7 +23,7 @@ const ABYSS = toLum('#49e0cf', 1)
 
 const RIPPLE_LIFE = 2.8
 const RIPPLE_REACH = 1150
-const RIPPLE_GAIN = NO_COMPOSER ? 0.9 : 1
+const RIPPLE_GAIN = NO_COMPOSER ? 0.65 : 0.75
 
 export default function GreatVault() {
   const mesh = useRef<THREE.Mesh>(null!)
